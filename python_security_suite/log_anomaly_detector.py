@@ -17,22 +17,23 @@ class Colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
 
+# Regex para syslog padrão (ex: "Oct 25 14:02:11")
+SYSLOG_PATTERN = re.compile(r'^([A-Z][a-z]{2}\s+\d+\s\d{2}:\d{2}:\d{2})\s')
+# Assume ano atual pois syslog geralmente não tem ano (calculado uma vez para performance)
+CURRENT_YEAR = datetime.now().year
+
 def parse_log_line(line):
     """
     Tenta analisar uma linha de log comum (Syslog/Auth).
     Formato esperado: Month Day HH:MM:SS Hostname Process: Message
     Exemplo: Oct 25 10:00:01 my-server sshd[1234]: Failed password...
     """
-    # Regex para syslog padrão (ex: "Oct 25 14:02:11")
-    syslog_pattern = re.compile(r'^([A-Z][a-z]{2}\s+\d+\s\d{2}:\d{2}:\d{2})\s')
-
-    match = syslog_pattern.match(line)
+    match = SYSLOG_PATTERN.match(line)
     if match:
         date_str = match.group(1)
         try:
-            # Assume ano atual pois syslog geralmente não tem ano
-            current_year = datetime.now().year
-            date_obj = datetime.strptime(f"{current_year} {date_str}", "%Y %b %d %H:%M:%S")
+            # Uso de constante global para evitar chamada repetida a datetime.now().year
+            date_obj = datetime.strptime(f"{CURRENT_YEAR} {date_str}", "%Y %b %d %H:%M:%S")
             return date_obj
         except ValueError:
             return None
