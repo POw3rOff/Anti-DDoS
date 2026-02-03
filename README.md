@@ -1,134 +1,72 @@
-**Proteção contra ataques DDoS: Tornar a proteção contra ataques DDoS acessível a todos**
+Estes scripts implementam um firewall usando o iptables para proteger o servidor associado Cyber Gamers. Foi desenvolvido pelo poweroff e testado contra ataques DDoS pela comunidade. Mais informações sobre o projeto podem ser encontradas em https://cyber-gamers.org/
 
-todos os scripts usam comentarios detalhados do bard.
+---
 
-Estes scripts implementam um firewall usando o iptables para proteger o servidor associado Cyber Gamers.
-Foi desenvolvido pelo poweroff e testado contra ataques DDoS pela comunidade.
-Mais informações sobre o projeto podem ser encontradas em https://cyber-gamers.org/
-* Os scripts usam serviços e regras do Nginx, Apache, Fail2Ban, ModSecurity, iptables, MOD_EVASION, kernel, geoip, ipset e blocklists
+# Cyber Gamers Linux Security Suite
 
-**Descrição:**
-Este repositório contém um conjunto abrangente de scripts projetados para fortalecer a segurança e melhorar o desempenho do seu servidor.
-Os scripts incorporam uma variedade de serviços e regras, abordando as seguintes áreas-chave:
+Este repositório evoluiu para uma suite completa de segurança, auditoria e hardening para sistemas Linux. Além do firewall original, ele agora inclui ferramentas para proteção de kernel, backups inteligentes, resposta a incidentes, detecção de intrusões e muito mais.
 
-* Nginx e Apache: Configurações específicas para servidores web líderes para otimização de desempenho e segurança.
+## Estrutura do Projeto
 
-* Fail2Ban: Implementa regras para detectar e mitigar tentativas de intrusão, protegendo contra ataques de força bruta.
+O projeto está organizado em suites modulares, cada uma focada em um aspecto crítico da segurança:
 
-* ModSecurity: Aplica regras de segurança da aplicação web para proteger contra ameaças como injeção de SQL, XSS e outros ataques.
+### 🛡️ Segurança de Rede e Firewall
+**Diretórios:** `ddos_protection`, `linux_firewall_suite`, `advanced_network_security_suite`, `network_access_control`
+*   **Anti-DDoS:** Scripts avançados com integração ao Kernel e Blocklists para mitigação de ataques volumétricos.
+*   **Firewall Modular:** Suporte para `iptables`, `nftables`, `ufw`, `shorewall`, `firewalld` e `fail2ban`.
+*   **Monitorização:** Detecção de tráfego de saída suspeito, túneis, scans internos e anomalias de DNS/TLS.
 
-* iptables: Configura regras de firewall para controlar o tráfego de rede e proteger contra ameaças específicas.
+### 🐧 Kernel e Hardening do SO
+**Diretórios:** `kernel_os_security_suite`, `system_security_suite`, `system_resistance_suite`
+*   **Auditoria:** Verificação de integridade do kernel, módulos e binários do sistema.
+*   **Hardening:** Ajustes de sysctl, detecção de rootkits, exploits locais e verificação de LSM (SELinux/AppArmor).
+*   **Resistência:** Testes de resistência do sistema contra vetores de ataque comuns.
 
-* MOD_EVASION: configurações para evasão de modos de ataque específicos, melhorando a segurança contra certos tipos de ataques.
+### 💾 Backups e Redundância
+**Diretórios:** `smart_backup_suite`, `backup_security_suite`, `redundancy_and_survival_suite`, `governance_and_control_suite`
+*   **Inteligência:** Backups incrementais, compressão adaptativa e retenção GFS (Grandfather-Father-Son).
+*   **Segurança:** Criptografia, airgap, honeypots de backup e proteção contra ransomware.
+*   **Resiliência:** Replicação geográfica e validação cruzada.
 
-* Kernel: Realiza ajustes no kernel do sistema para otimizar o desempenho e fortalecer a segurança.
+### 🚨 Detecção e Resposta a Incidentes
+**Diretórios:** `incident_response_suite`, `intrusion_detection_suite`, `advanced_security_suite`, `logging_observability_suite`
+*   **Resposta:** Ferramentas para congelamento de evidências, snapshots forenses e timeline de restauro.
+*   **Detecção:** Identificação de beaconing, reverse shells, privilégios elevados e assinaturas de ataque.
+*   **Observabilidade:** Centralização de logs, validação de timestamps e detecção de manipulação de logs (tampering).
 
-* geoip e ipset: Utiliza informações geográficas para bloquear tráfego de países específicos, adicionando uma camada adicional de segurança.
+### 📦 Segurança de Aplicações e Containers
+**Diretórios:** `container_security_suite`, `application_security_suite`, `supply_chain_security_suite`, `web_security`
+*   **Containers:** Auditoria de Docker/Podman, verificação de imagens e detecção de escapes.
+*   **Web/App:** Proteção contra RCE, Webshells, SSRF e monitorização de uploads.
+*   **Supply Chain:** Validação de updates, dependências e inventário de software.
 
-* Blocklists: Integra diversas listas de bloqueio (blocklists) para prevenir acessos de IPs maliciosos conhecidos.
+### 🔒 Zero Trust e Automação
+**Diretórios:** `zero_trust_suite`, `automation_and_maturity_suite`
+*   **Zero Trust:** Auditoria de movimento lateral, isolamento de serviços e privilégios mínimos.
+*   **Maturidade:** Dashboards de estado, scoring de segurança e auditorias automatizadas.
 
+## Instalação e Uso
 
-**Objetivos:**
+A maioria dos scripts foi desenvolvida para ser executada em ambiente Linux (Debian/Ubuntu/CentOS) e requer privilégios de **root**.
 
-* Fornecer uma defesa abrangente contra ataques DDoS, incluindo ataques de volume, ataques de injeção e ataques de reflexão.
-* Facilitar a configuração de segurança para sistemas de qualquer tamanho ou complexidade.
-* Tornar a proteção contra ataques DDoS acessível a todos.
+1.  **Clone o repositório:**
+    ```bash
+    git clone https://github.com/seu-repo/cyber-gamers-security.git
+    cd cyber-gamers-security
+    ```
 
-**Conteúdo:**
+2.  **Permissões de Execução:**
+    ```bash
+    chmod +x **/*.sh
+    ```
 
-* **Scripts:**
-    * Scripts para configurar firewalls, sistemas de detecção de intrusão e outros sistemas de segurança.
-    * Scripts para monitorar o tráfego de rede e detectar ataques DDoS.
-    * Scripts para mitigar os efeitos de ataques DDoS.
-      
-* **Configurações de segurança:**
-    * Modelos de configuração de segurança para diferentes sistemas e aplicações.
-    * Guias de configuração passo a passo.
-    * Ferramentas para automatizar a configuração de segurança.
+3.  **Execução:**
+    Navegue até o diretório da suite desejada e execute o script correspondente. Por exemplo, para ativar o novo Anti-DDoS:
+    ```bash
+    cd ddos_protection
+    ./new_anti_ddos.sh
+    ```
 
-**Como usar:**
+## Aviso Legal
 
-Para usar este repositório, siga estas etapas:
-
-1. Clone o repositório para o seu computador.
-2. Escolha os scripts e configurações de segurança que você deseja usar.
-3. Siga as instruções nos scripts ou nas configurações de segurança.
-
-**Contribuições:**
-
-Este repositório é um projeto open source. Todos são incentivados a contribuir com scripts, configurações de segurança ou outros recursos.
-
-**Requisitos:**
-
-* **Conhecimento básico de segurança de rede.**
-* **Familiaridade com o uso de scripts e configurações de segurança.**
-
-**Exemplos de uso:**
-
-Este repositório pode ser usado para proteger uma variedade de sistemas, incluindo:
-
-* Websites
-* Servidores de e-mail
-* Aplicativos de rede
-* Redes corporativas
-
-**Exemplo de script:**
-
-```
-#!/bin/bash
-
-# Este script configura um firewall para bloquear ataques DDoS
-
-# Importa as funções necessárias
-source /etc/security/ddos.conf
-
-# Define as regras de firewall
-firewall_rule "block_tcp_flood" {
-  protocol = "tcp"
-  port = "80"
-  action = "drop"
-}
-
-# Aplica as regras de firewall
-firewall_apply
-```
-
-Este script configura um firewall para bloquear ataques DDoS de origem TCP no porto 80.
-
-**Exemplo de configuração de segurança:**
-
-```
-# Modelo de configuração de segurança para um website
-
-# Firewall
-
-firewall_rule "allow_http" {
-  protocol = "tcp"
-  port = "80"
-  action = "allow"
-}
-
-firewall_rule "allow_https" {
-  protocol = "tcp"
-  port = "443"
-  action = "allow"
-}
-
-# Sistema de detecção de intrusão
-
-iptables_rule "block_syn_flood" {
-  protocol = "tcp"
-  action = "drop"
-}
-
-# Sistema de mitigação de ataques DDoS
-
-ddos_mitigation_rule "block_high_volume_traffic" {
-  threshold = 1000
-  action = "drop"
-}
-```
-
-Este modelo de configuração de segurança configura um firewall para permitir apenas o tráfego HTTP e HTTPS, um sistema de detecção de intrusão para bloquear ataques SYN flood e um sistema de mitigação de ataques DDoS para bloquear tráfego de alto volume.
-
-Este repositório contém scripts e configurações de segurança para proteger sistemas contra todos os tipos de ataques.
+Estes scripts são fornecidos "como estão", sem garantia de qualquer tipo. O uso destas ferramentas é de inteira responsabilidade do utilizador. Teste sempre em ambiente controlado antes de aplicar em produção.
