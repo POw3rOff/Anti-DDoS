@@ -932,18 +932,22 @@ CONSTRUIR_PAIS(){
     if [ ! -s $CACHE_DIR$1 ] || [ ! $2 -a ! $3 ];then return;fi
     echo "CARREGAR	$1"
     local LINHA
-    for LINHA in `cat $CACHE_DIR$1 | grep -E "\|($2|$3)\|ipv4\|"`
-    do
-        local CODIGO=`echo $LINHA | cut -d "|" -f 2`
-        local ENDERECO=`echo $LINHA | cut -d "|" -f 4`
-        local CONTAGEM=`echo $LINHA | cut -d "|" -f 5`
-        local CIDR=32
-        if [ $2 ] && [ `echo $CODIGO | grep -E $2` ]; then
-            CONSTRUIR_REGRA_PAIS $ENDERECO $CONTAGEM CONSTRUIR_REGRA_PAIS_ACEITAR
-            printf "%-10s%-4s%-20s%s\n" ACEITAR $CODIGO $ENDERECO/$? $LINHA
-        elif [ $3 ] && [ `echo $CODIGO | grep -E $3` ]; then
-            CONSTRUIR_REGRA_PAIS $ENDERECO $CONTAGEM CONSTRUIR_REGRA_PAIS_REJEITAR
-            printf "%-10s%-4s%-20s%s\n" REJEITAR $CODIGO $ENDERECO/$? $LINHA
+    awk -F '|' -v code1="$2" -v code2="$3" '
+    $3 == "ipv4" && ($2 ~ code1 || $2 ~ code2) {
+        action = ""
+        if (code1 != "" && $2 ~ code1) action = "ACEITAR"
+        else if (code2 != "" && $2 ~ code2) action = "REJEITAR"
+
+        if (action != "") {
+             print action "|" $2 "|" $4 "|" $5 "|" $0
+        }
+    }' "$CACHE_DIR$1" | while IFS='|' read -r ACTION CODIGO ENDERECO CONTAGEM LINHA; do
+        if [ "$ACTION" == "ACEITAR" ]; then
+             CONSTRUIR_REGRA_PAIS "$ENDERECO" "$CONTAGEM" CONSTRUIR_REGRA_PAIS_ACEITAR
+             printf "%-10s%-4s%-20s%s\n" ACEITAR "$CODIGO" "$ENDERECO/$?" "$LINHA"
+        elif [ "$ACTION" == "REJEITAR" ]; then
+             CONSTRUIR_REGRA_PAIS "$ENDERECO" "$CONTAGEM" CONSTRUIR_REGRA_PAIS_REJEITAR
+             printf "%-10s%-4s%-20s%s\n" REJEITAR "$CODIGO" "$ENDERECO/$?" "$LINHA"
         fi
     done
 }
