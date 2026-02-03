@@ -38,7 +38,9 @@ function ddos_mitigation_rule() {
     if ! sudo iptables -C INPUT -m recent --name $rule_name &> /dev/null; then
         # Aplica a regra para bloquear tráfego acima do limiar
         for port in 80 443; do
+            sudo iptables -A INPUT -p tcp --dport $port -m recent --set --name $rule_name
             sudo iptables -A INPUT -p tcp --dport $port -m recent --update --seconds 1 --hitcount $threshold --name $rule_name -j $action
+            sudo iptables -A INPUT -p udp --dport $port -m recent --set --name $rule_name
             sudo iptables -A INPUT -p udp --dport $port -m recent --update --seconds 1 --hitcount $threshold --name $rule_name -j $action
         done
 

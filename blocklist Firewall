@@ -55,10 +55,10 @@ declare -A blocklist_urls=(
 # Adicione mais URLs aqui conforme necessário
 
 # Diretório onde as listas serão salvas
-blocklist_dir="/diretorio"
+blocklist_dir="/tmp/blocklist_firewall"
 
 # Arquivo temporário para armazenar as listas antes da fusão
-temp_file="/tempfile"
+temp_file="/tmp/tempfile_blocklist"
 
 # Função para verificar e criar diretórios, se necessário
 check_and_create_directory() {

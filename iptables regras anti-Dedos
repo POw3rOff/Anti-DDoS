@@ -120,3 +120,6 @@ iptables -A FIREWALL -j FW_HTTPS && echo "FIREWALL	FW_HTTPS"
 # Logar e bloquear tudo que não se enquadra nas regras acima
 iptables -A FIREWALL -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES DEFAULT DROP] : '
 iptables -A FIREWALL -j DROP
+
+# Aplicar FIREWALL à chain INPUT
+iptables -A INPUT -j FIREWALL

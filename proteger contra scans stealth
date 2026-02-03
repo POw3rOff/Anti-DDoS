@@ -45,6 +45,11 @@ sudo iptables -P OUTPUT ACCEPT
 
 # Adiciona regras para registrar e descartar pacotes com flags inadequadas
 msg "Configurando regras contra scans stealth..."
+sudo iptables -N TRACK_ATTACKER 2>/dev/null
+sudo iptables -A TRACK_ATTACKER -m recent --name track --set
+sudo iptables -A TRACK_ATTACKER -m recent --name track --rcheck --seconds 60 --hitcount 5 -j LOG --log-prefix "[IPTABLES TRACK_ATTACKER] : "
+sudo iptables -A TRACK_ATTACKER -m recent --name track --rcheck --seconds 60 --hitcount 5 -j DROP
+
 sudo iptables -N FW_STEALTHSCAN 2>/dev/null
 sudo iptables -N ANTI_STEALTHSCAN
 sudo iptables -N ANTI_STEALTHSCAN_
@@ -85,3 +90,6 @@ sudo iptables -A ANTI_STEALTHSCAN__ -j DROP
 sudo iptables-save > /etc/iptables/rules.v4
 
 msg "Configurações do iptables aplicadas com sucesso!"
+
+# Aplicar FW_STEALTHSCAN à chain INPUT
+sudo iptables -A INPUT -j FW_STEALTHSCAN

@@ -140,3 +140,7 @@ setup
 setup_suspicious_access_tracking
 setup_attack_logging
 save_iptables
+
+# Aplicar regras de rastreamento à chain INPUT
+sudo iptables -A INPUT -j TRACK_PROWLER
+sudo iptables -A INPUT -j TRACK_ATTACKER
