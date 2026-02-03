@@ -1,0 +1,3 @@
+# /etc/shorewall/zones
+fw firewall
+net ipv4

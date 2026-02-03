@@ -1,0 +1,3 @@
+# /etc/shorewall/interfaces
+# Zone  Interface  Options
+net     eth0       tcpflags,logmartians,nosmurfs

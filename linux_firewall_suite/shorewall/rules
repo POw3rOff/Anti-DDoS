@@ -1,0 +1,11 @@
+# /etc/shorewall/rules
+# Action  Source  Dest  Proto  DestPort(s)
+
+# Aceitar SSH
+ACCEPT    net     fw    tcp    22
+
+# Aceitar Web
+ACCEPT    net     fw    tcp    80,443
+
+# Ping com limite (Rate Limit 1/s)
+ACCEPT    net     fw    icmp   8  -  -  1/sec
