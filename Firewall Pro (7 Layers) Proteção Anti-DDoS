@@ -136,9 +136,22 @@ sort -u "$temp_file" > "$blocklist_dir/blocklist_combined.txt"
 rm "$temp_file"
 
 # Atualiza as regras do iptables com os IPs da blocklist
-while read -r ip; do
-    add_iptables_rule "$ip" "IP Blocklist"
-done < "$blocklist_dir/blocklist_combined.txt"
+# Otimização: Uso de ipset para melhor desempenho
+ipset_name="blocklist"
+# Criar o set se não existir
+ipset -exist create "$ipset_name" hash:ip hashsize 4096
+
+# Limpar o set para garantir que apenas os IPs atuais estejam listados
+ipset flush "$ipset_name"
+
+# Adicionar IPs ao ipset em massa
+sed "s/^/add $ipset_name /" "$blocklist_dir/blocklist_combined.txt" | ipset restore
+
+# Adicionar regra única ao iptables
+if ! iptables -C INPUT -m set --match-set "$ipset_name" src -j DROP -m comment --comment "$IPTABLES_MESSAGE: IP Blocklist" 2>/dev/null; then
+    iptables -A INPUT -m set --match-set "$ipset_name" src -j DROP -m comment --comment "$IPTABLES_MESSAGE: IP Blocklist"
+fi
+echo "Regras adicionadas via ipset com sucesso."
 
 # Regista o log de atividades
 timestamp=$(date +"%Y-%m-%d %H:%M:%S")
