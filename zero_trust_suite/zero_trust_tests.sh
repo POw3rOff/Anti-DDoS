@@ -6,6 +6,7 @@
 # 1. Acesso Lateral (Lateral Movement)
 # 2. Isolamento entre Serviços (Service Isolation)
 # 3. Acesso Mínimo Necessário (Least Privilege)
+# 4. Observabilidade e Identidade (Identity & Observability)
 #
 # Baseado em princípios Zero Trust onde nenhuma entidade é confiável por padrão.
 #
@@ -85,6 +86,33 @@ else
     check_pass "Tabela ARP com tamanho razoável ($NEIGHBORS vizinhos)."
 fi
 
+# 1.5 Arquivos de Confiança Legada (.rhosts/.shosts)
+# Mecanismos antigos que confiam em IPs/hosts sem autenticação forte.
+echo -e "\n[Verificação] Arquivos de Confiança Legada (.rhosts/.shosts)"
+LEGACY_TRUST=$(find /home /root -maxdepth 2 -name ".rhosts" -o -name ".shosts" 2>/dev/null)
+if [ -n "$LEGACY_TRUST" ]; then
+    check_fail "Arquivos .rhosts ou .shosts encontrados (Risco Crítico de Confiança Implícita):"
+    echo "$LEGACY_TRUST"
+else
+    check_pass "Nenhum arquivo de confiança legada encontrado."
+fi
+
+# 1.6 NFS Exports Inseguros
+# Se houver servidor NFS, verificar se há exportações para mundo ou inseguras.
+echo -e "\n[Verificação] Exportações NFS Inseguras"
+if command -v exportfs > /dev/null 2>&1; then
+    INSECURE_NFS=$(exportfs -v 2>/dev/null | grep -E "insecure|no_root_squash|rw,async,wdelay,nohide,crossmnt,fsid=0")
+    if [ -n "$INSECURE_NFS" ]; then
+        check_warn "Exportações NFS potencialmente inseguras detectadas (no_root_squash/insecure):"
+        echo "$INSECURE_NFS"
+    else
+        check_pass "Configuração de NFS parece segura (ou sem exports ativos)."
+    fi
+else
+    check_info "Serviço NFS não detectado (exportfs não encontrado)."
+fi
+
+
 # ==============================================================================
 # 2. Testes de Isolamento entre Serviços (Service Isolation)
 # ==============================================================================
@@ -129,6 +157,31 @@ else
     check_pass "Diretórios em /home parecem isolados (sem acesso world)."
 fi
 
+# 2.4 Sticky Bit em Diretórios Temporários
+# Impede que usuários apaguem arquivos uns dos outros em /tmp
+echo -e "\n[Verificação] Sticky Bit em /tmp e /var/tmp"
+FAIL_STICKY=0
+for temp_dir in "/tmp" "/var/tmp"; do
+    if [ -d "$temp_dir" ]; then
+        if ls -ld "$temp_dir" | grep -q "^drwxrwxrwt"; then
+            check_pass "Sticky bit ativado em $temp_dir."
+        else
+            check_fail "Sticky bit NÃO detectado em $temp_dir (Permissões: $(ls -ld $temp_dir | awk '{print $1}'))"
+            FAIL_STICKY=1
+        fi
+    fi
+done
+
+# 2.5 UMASK Padrão
+# Garante que novos arquivos não sejam criados com permissões excessivas.
+echo -e "\n[Verificação] UMASK Padrão (/etc/login.defs)"
+if grep -E "^UMASK.*027|^UMASK.*077" /etc/login.defs > /dev/null; then
+    check_pass "UMASK padrão seguro encontrado (027 ou 077)."
+else
+    CURRENT_UMASK=$(grep "^UMASK" /etc/login.defs | awk '{print $2}')
+    check_warn "UMASK padrão pode ser permissivo (Valor atual: $CURRENT_UMASK). Recomendado: 027."
+fi
+
 # ==============================================================================
 # 3. Testes de Acesso Mínimo Necessário (Least Privilege)
 # ==============================================================================
@@ -168,6 +221,38 @@ if [ -r /etc/shadow ]; then
     fi
 else
     check_info "Não foi possível ler /etc/shadow (Permissão negada ou não existe). Execute como root."
+fi
+
+# 3.4 Usuários com UID 0 (Non-Root)
+echo -e "\n[Verificação] Usuários não-root com UID 0"
+UID0_USERS=$(awk -F: '($3 == 0 && $1 != "root") {print $1}' /etc/passwd)
+if [ -n "$UID0_USERS" ]; then
+    check_fail "Contas adicionais com UID 0 detectadas (Backdoor potencial): $UID0_USERS"
+else
+    check_pass "Apenas 'root' possui UID 0."
+fi
+
+# 3.5 Login de Root via SSH
+echo -e "\n[Verificação] Login de Root via SSH"
+PERMIT_ROOT=$(grep -Ei "^PermitRootLogin" /etc/ssh/sshd_config | awk '{print $2}')
+if [ "$PERMIT_ROOT" == "no" ] || [ "$PERMIT_ROOT" == "prohibit-password" ]; then
+    check_pass "Login de root via SSH restrito ($PERMIT_ROOT)."
+else
+    check_warn "Login de root via SSH pode estar habilitado (Valor: ${PERMIT_ROOT:-Default(yes)})."
+fi
+
+# ==============================================================================
+# 4. Observabilidade e Identidade (Identity & Observability)
+# ==============================================================================
+echo -e "\n--- ZT-04: Observabilidade e Auditoria ---"
+
+# 4.1 Serviço de Auditoria (auditd)
+# Zero Trust requer monitoramento constante ("Verify explicitly").
+echo "[Verificação] Serviço Auditd"
+if systemctl is-active auditd >/dev/null 2>&1 || service auditd status >/dev/null 2>&1; then
+    check_pass "Serviço 'auditd' está rodando (Auditoria ativa)."
+else
+    check_warn "Serviço 'auditd' NÃO está rodando. Monitoramento de segurança comprometido."
 fi
 
 echo -e "\n=== Testes Zero Trust Concluídos ==="
