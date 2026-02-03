@@ -50,9 +50,18 @@ processarASN() {
     fi
 
     # Adiciona regras de bloqueio
-    for ASN in $(cat "$ASN_LIST"); do
-        iptables -A BLOCK_ASN -m string --string "$ASN" --algo kmp -j "$ACTION"
-    done
+    # OTIMIZAÇÃO: Usando iptables-restore para carregar regras em lote.
+    local RESTORE_FILE="${ASN_LIST}.restore"
+    echo "*filter" > "$RESTORE_FILE"
+
+    # Transforma a lista em formato iptables-restore
+    tr -s '[:space:]' '\n' < "$ASN_LIST" | grep -v '^$' | \
+    sed "s|^|-A BLOCK_ASN -m string --string \"|; s|$|\" --algo kmp -j $ACTION|" >> "$RESTORE_FILE"
+
+    echo "COMMIT" >> "$RESTORE_FILE"
+
+    iptables-restore --noflush < "$RESTORE_FILE"
+    rm -f "$RESTORE_FILE"
 }
 
 # Função para baixar a lista de ASNs
