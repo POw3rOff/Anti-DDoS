@@ -1,4 +1,4 @@
-Estes scripts implementam um firewall robusto usando iptables para proteger a infraestrutura da Cyber-Gamers. O projeto foi desenvolvido por p0w3r0ff e exaustivamente testado contra ataques DDoS pela comunidade. Mais informações sobre o projeto podem ser encontradas em https://cyber-gamers.org/
+Esta suite de segurança implementa um firewall robusto baseado em iptables, desenvolvido por p0w3r0ff para proteger a infraestrutura da Cyber-Gamers. A solução foi exaustivamente testada e validada pela comunidade contra ataques DDoS. Para mais informações, visite https://cyber-gamers.org/
 
 ---
 
