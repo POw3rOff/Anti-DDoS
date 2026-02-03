@@ -21,34 +21,46 @@
 PORTUGAL_IPS_URL="http://www.ipdeny.com/ipblocks/data/countries/pt.zone"
 
 # URL para a lista de IPs maliciosos (substitua pelo URL apropriado)
-BLOCKLIST_URL="https://example.com/malicious-ips.txt"
+BLOCKLIST_URL="https://lists.blocklist.de/lists/all.txt"
 
-# Crie conjuntos IPSET para Portugal e para a lista de bloqueio
-ipset create portugal hash:net
-ipset create blocklist hash:ip
+# Verificar se ipset e iptables estão instalados
+if ! command -v ipset &>/dev/null || ! command -v iptables &>/dev/null; then
+    echo "Erro: ipset ou iptables não encontrados."
+else
+    # Crie conjuntos IPSET para Portugal e para a lista de bloqueio
+    sudo ipset create portugal hash:net -exist
+    sudo ipset create blocklist hash:ip -exist
 
-# Adicione faixas de IPs associadas a Portugal
-wget -O - $PORTUGAL_IPS_URL | xargs -I {} ipset add portugal {}
+    # Adicione faixas de IPs associadas a Portugal
+    echo "Baixando lista de IPs de Portugal..."
+    wget -q -O - "$PORTUGAL_IPS_URL" | grep -vE '^(#|$)' | while read -r line; do
+        sudo ipset add portugal "$line" -exist
+    done
 
-# Adicione IPs maliciosos à lista de bloqueio
-wget -O - $BLOCKLIST_URL | xargs -I {} ipset add blocklist {}
+    # Adicione IPs maliciosos à lista de bloqueio
+    echo "Baixando lista de bloqueio..."
+    wget -q -O - "$BLOCKLIST_URL" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | while read -r line; do
+        sudo ipset add blocklist "$line" -exist
+    done
 
-# Crie uma regra iptables para permitir tráfego de Portugal
-iptables -A INPUT -m set --match-set portugal src -j ACCEPT
+    # Limpar regras anteriores (Cuidado: isso limpa tudo)
+    # sudo iptables -F
 
-# Crie uma regra iptables para bloquear tráfego de IPs maliciosos
-iptables -A INPUT -m set --match-set blocklist src -j DROP
+    # Crie uma regra iptables para permitir tráfego de Portugal
+    sudo iptables -A INPUT -m set --match-set portugal src -j ACCEPT
 
-# Bloqueie todo o tráfego não especificado
-iptables -A INPUT -j DROP
+    # Crie uma regra iptables para bloquear tráfego de IPs maliciosos
+    sudo iptables -A INPUT -m set --match-set blocklist src -j DROP
 
-# Salve as configurações
-service iptables save
-service iptables restart
+    # Bloqueie todo o tráfego não especificado (Cuidado: isso pode bloquear seu acesso se o IP não for PT)
+    # sudo iptables -A INPUT -j DROP
 
+    # Salve as configurações
+    if command -v netfilter-persistent &>/dev/null; then
+        sudo service netfilter-persistent save
+    else
+        sudo iptables-save | sudo tee /etc/iptables/rules.v4
+    fi
 
-
-
-
-
-
+    echo "Configuração concluída."
+fi

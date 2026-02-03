@@ -22,17 +22,19 @@
 # Config                                                   #
 #----------------------------------------------------------#
 
-# URL da lista de ASNs para bloqueio
-ASN_LIST_URLS=("https://example.com/asns1.txt" "https://example.com/asns2.txt")
+# URL da lista de ASNs para bloqueio (substitua por URLs válidas)
+# Exemplo: ASN_LIST_URLS=("https://example.com/asns1.txt")
+ASN_LIST_URLS=()
 
 # Diretório de destino para salvar a lista de IPs
 LIST_DIR="/etc/iptables/"
-
-# Data de validade da lista de ASNs
-ASN_LIST_EXPIRY="2024-01-01"
+# Data de validade da lista de ASNs (exemplo de data futura)
+ASN_LIST_EXPIRY="2025-01-01"
 
 # Serviços de bad ASN para usar
-BAD_ASN_SERVICES=("spamhaus" "openphish" "malwarepatrol")
+# Estes são placeholders; você precisa de uma fonte real que forneça prefixos por ASN ou nome
+# BAD_ASN_SERVICES=("spamhaus" "openphish" "malwarepatrol")
+BAD_ASN_SERVICES=()
 
 #----------------------------------------------------------#
 # Functions                                                #
@@ -43,10 +45,9 @@ processarASN() {
     local ASN_LIST="$1"
     local ACTION="$2"
 
-    # Verifica se a lista de ASNs está atualizada
-    if [ "$(date +%s)" -gt "$(date -d "$ASN_LIST_EXPIRY" +%s)" ]; then
-        echo "Lista de ASNs expirada. Obtendo uma nova lista..."
-        baixarASN "$ASN_LIST"
+    if [ ! -f "$ASN_LIST" ]; then
+        echo "Arquivo de ASN não encontrado: $ASN_LIST"
+        return
     fi
 
     # Adiciona regras de bloqueio
@@ -54,13 +55,14 @@ processarASN() {
     local RESTORE_FILE="${ASN_LIST}.restore"
     echo "*filter" > "$RESTORE_FILE"
 
-    # Transforma a lista em formato iptables-restore
-    tr -s '[:space:]' '\n' < "$ASN_LIST" | grep -v '^$' | \
-    sed "s|^|-A BLOCK_ASN -m string --string \"|; s|$|\" --algo kmp -j $ACTION|" >> "$RESTORE_FILE"
+    # Assume que o arquivo contém CIDRs ou IPs, não strings para '-m string'
+    # Se a lista for de prefixos IP (CIDR):
+    grep -v '^$' "$ASN_LIST" | grep -v '#' | \
+    sed "s|^|-A BLOCK_ASN -s |; s|$| -j $ACTION|" >> "$RESTORE_FILE"
 
     echo "COMMIT" >> "$RESTORE_FILE"
 
-    iptables-restore --noflush < "$RESTORE_FILE"
+    sudo iptables-restore --noflush < "$RESTORE_FILE"
     rm -f "$RESTORE_FILE"
 }
 
@@ -69,15 +71,22 @@ baixarASN() {
     local ASN_URL="$1"
     local ASN_LIST="$2"
 
-    wget -O "$ASN_LIST" "$ASN_URL"
+    sudo wget -q -O "$ASN_LIST" "$ASN_URL"
 }
 
 #----------------------------------------------------------#
 # ASN Block Rules                                           #
 #----------------------------------------------------------#
 
-# Criando a chain BLOCK_ASN
-iptables -N BLOCK_ASN
+# Verificar/Criar diretório
+if [ ! -d "$LIST_DIR" ]; then
+    sudo mkdir -p "$LIST_DIR"
+fi
+
+# Criando a chain BLOCK_ASN se não existir
+sudo iptables -N BLOCK_ASN 2>/dev/null
+# Limpar chain
+sudo iptables -F BLOCK_ASN
 
 # Processando cada URL da lista de ASN
 for ASN_URL in "${ASN_LIST_URLS[@]}"; do
@@ -92,8 +101,9 @@ done
 
 # Adicionando regras de bloqueio para serviços de bad ASN
 for BAD_ASN_SERVICE in "${BAD_ASN_SERVICES[@]}"; do
-    ASN_LIST_URL="https://${BAD_ASN_SERVICE}.org/data/prefixes/full/latest.txt"
-    ASN_LIST="${LIST_DIR}$(basename "$ASN_LIST_URL")"
+    # URL de exemplo - precisa ser substituída por uma URL real que retorne prefixos IP
+    ASN_LIST_URL="https://example.com/data/prefixes/${BAD_ASN_SERVICE}.txt"
+    ASN_LIST="${LIST_DIR}${BAD_ASN_SERVICE}.txt"
 
     # Baixando a lista de ASN
     baixarASN "$ASN_LIST_URL" "$ASN_LIST"
@@ -102,12 +112,12 @@ for BAD_ASN_SERVICE in "${BAD_ASN_SERVICES[@]}"; do
     processarASN "$ASN_LIST" "DROP"
 done
 
-# Adicionando a chain BLOCK_ASN às regras existentes
-iptables -A INPUT -j BLOCK_ASN
-iptables -A OUTPUT -j BLOCK_ASN
-iptables -A FORWARD -j BLOCK_ASN
+# Adicionando a chain BLOCK_ASN às regras existentes se não existir
+if ! sudo iptables -C INPUT -j BLOCK_ASN 2>/dev/null; then
+    sudo iptables -A INPUT -j BLOCK_ASN
+    sudo iptables -A OUTPUT -j BLOCK_ASN
+    sudo iptables -A FORWARD -j BLOCK_ASN
+fi
 
 # Mensagem de conclusão do script
 echo "Regras de ASN configuradas com sucesso!"
-
-exit 0

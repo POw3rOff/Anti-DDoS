@@ -19,38 +19,75 @@
 ###################################################################################################################
 
 # URL para a lista de IPs de Portugal no formato CIDR
-CLOUDFLARE_IPS_URL="https://www.cloudflare.com/ips-v4"
+CLOUDFLARE_IPS_URL_V4="https://www.cloudflare.com/ips-v4"
+CLOUDFLARE_IPS_URL_V6="https://www.cloudflare.com/ips-v6"
 
 # URLs para as listas de IPs associados a países desejados
 # Substitua "XX" pelos códigos de dois caracteres dos países que deseja bloquear
+# Exemplo: BLOCKED_COUNTRIES=("cn" "ru")
 BLOCKED_COUNTRIES=("XX")
 BLOCKED_COUNTRIES_URL="http://www.ipdeny.com/ipblocks/data/countries"
 
-# Crie conjuntos IPSET para Cloudflare e para os países bloqueados
-ipset create cloudflare hash:net
-for country in "${BLOCKED_COUNTRIES[@]}"; do
-    ipset create $country hash:net
-done
+# Verificar se ipset e iptables estão instalados
+if ! command -v ipset &>/dev/null || ! command -v iptables &>/dev/null; then
+    echo "Erro: ipset ou iptables não encontrados."
+else
+    # Crie conjuntos IPSET para Cloudflare e para os países bloqueados
+    sudo ipset create cloudflare hash:net -exist
+    # Nota: Suporte IPv6 necessita de "family inet6", aqui estamos focando em IPv4 para simplicidade,
+    # mas adicionando suporte básico.
+    sudo ipset create cloudflare6 hash:net family inet6 -exist
 
-# Adicione IPs da Cloudflare ao conjunto
-wget -O - $CLOUDFLARE_IPS_URL | xargs -I {} ipset add cloudflare {}
+    for country in "${BLOCKED_COUNTRIES[@]}"; do
+        # Ignora placeholder XX
+        if [ "$country" == "XX" ]; then continue; fi
+        sudo ipset create "$country" hash:net -exist
+    done
 
-# Adicione IPs dos países bloqueados aos conjuntos correspondentes
-for country in "${BLOCKED_COUNTRIES[@]}"; do
-    wget -O - "$BLOCKED_COUNTRIES_URL/$country.zone" | xargs -I {} ipset add $country {}
-done
+    # Adicione IPs da Cloudflare ao conjunto
+    echo "Atualizando IPs Cloudflare..."
+    wget -q -O - "$CLOUDFLARE_IPS_URL_V4" | while read -r line; do
+        sudo ipset add cloudflare "$line" -exist
+    done
 
-# Crie regras iptables para permitir tráfego da Cloudflare
-iptables -A INPUT -m set --match-set cloudflare src -j ACCEPT
+    wget -q -O - "$CLOUDFLARE_IPS_URL_V6" | while read -r line; do
+        sudo ipset add cloudflare6 "$line" -exist
+    done
 
-# Crie regras iptables para bloquear tráfego dos países específicos
-for country in "${BLOCKED_COUNTRIES[@]}"; do
-    iptables -A INPUT -m set --match-set $country src -j DROP
-done
+    # Adicione IPs dos países bloqueados aos conjuntos correspondentes
+    for country in "${BLOCKED_COUNTRIES[@]}"; do
+        if [ "$country" == "XX" ]; then continue; fi
+        echo "Atualizando IPs para país: $country"
+        wget -q -O - "$BLOCKED_COUNTRIES_URL/$country.zone" | while read -r line; do
+            sudo ipset add "$country" "$line" -exist
+        done
+    done
 
-# Bloqueie todo o tráfego não especificado
-iptables -A INPUT -j DROP
+    # Crie regras iptables para permitir tráfego da Cloudflare
+    sudo iptables -A INPUT -m set --match-set cloudflare src -j ACCEPT
+    # Se ip6tables estiver disponível:
+    if command -v ip6tables &>/dev/null; then
+        sudo ip6tables -A INPUT -m set --match-set cloudflare6 src -j ACCEPT
+    fi
 
-# Salve as configurações
-service iptables save
-service iptables restart
+    # Crie regras iptables para bloquear tráfego dos países específicos
+    for country in "${BLOCKED_COUNTRIES[@]}"; do
+        if [ "$country" == "XX" ]; then continue; fi
+        sudo iptables -A INPUT -m set --match-set "$country" src -j DROP
+    done
+
+    # Bloqueie todo o tráfego não especificado (Cuidado!)
+    # sudo iptables -A INPUT -j DROP
+
+    # Salve as configurações
+    if command -v netfilter-persistent &>/dev/null; then
+        sudo service netfilter-persistent save
+    else
+        sudo iptables-save | sudo tee /etc/iptables/rules.v4
+        if command -v ip6tables-save &>/dev/null; then
+            sudo ip6tables-save | sudo tee /etc/iptables/rules.v6
+        fi
+    fi
+
+    echo "Configuração concluída."
+fi

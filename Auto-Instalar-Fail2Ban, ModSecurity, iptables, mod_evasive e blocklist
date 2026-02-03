@@ -17,75 +17,81 @@
 # ___|___|___|___|___|___|___|___|___|___|___|___|__                                                             ##
 ###################################################################################################################
 
-#!/bin/bash
-
 # Verificar se o iptables está instalado e instalá-lo se necessário
 if ! command -v iptables &> /dev/null; then
     echo "Iptables não está instalado. Instalando..."
-    apt-get update
-    apt-get install -y iptables
+    sudo apt-get update
+    sudo apt-get install -y iptables
 fi
 
 # Verificar se o ipset está instalado e instalá-lo se necessário
 if ! command -v ipset &> /dev/null; then
     echo "Ipset não está instalado. Instalando..."
-    apt-get update
-    apt-get install -y ipset
+    sudo apt-get update
+    sudo apt-get install -y ipset
 fi
 
 # Instalar e configurar Fail2Ban
-apt-get update
-apt-get install -y fail2ban
+echo "Instalando fail2ban..."
+sudo apt-get update
+sudo apt-get install -y fail2ban
 
 # Configurar jail.local para SSH e Apache
-cat <<EOL > /etc/fail2ban/jail.local
+cat <<EOL | sudo tee /etc/fail2ban/jail.local
 [sshd]
 enabled = true
 
 [apache]
 enabled = true
 
-[nginx]
+[nginx-http-auth]
 enabled = true
 EOL
 
 # Reiniciar Fail2Ban
-service fail2ban restart
+sudo service fail2ban restart
 
 # Instalar e configurar ModSecurity
-apt-get update
-apt-get install -y libapache2-modsecurity
-cp /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf
+echo "Instalando ModSecurity..."
+sudo apt-get update
+sudo apt-get install -y libapache2-mod-security2
+if [ -f /etc/modsecurity/modsecurity.conf-recommended ]; then
+    sudo cp /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf
+fi
 
 # Configurar SecRuleEngine
-sed -i 's/SecRuleEngine DetectionOnly/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
+sudo sed -i 's/SecRuleEngine DetectionOnly/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
 
 # Reiniciar Apache
-service apache2 restart
+sudo service apache2 restart
 
 # Função para baixar e atualizar a lista de bloqueio
 update_blocklist() {
     BLOCKLIST_URLS=(
-        "URL_DA_LISTA_1"
-        "URL_DA_LISTA_2"
-        "URL_DA_LISTA_3"
-        "URL_DA_LISTA_4"
-        "URL_DA_LISTA_5"
+        "https://lists.blocklist.de/lists/all.txt"
+        "https://www.spamhaus.org/drop/drop.txt"
     )
 
-    BLOCKLIST_FILE="combined_blocklist.txt"
+    BLOCKLIST_FILE="/tmp/combined_blocklist.txt"
+
+    # Limpar arquivo anterior
+    > "$BLOCKLIST_FILE"
 
     for url in "${BLOCKLIST_URLS[@]}"; do
-        wget -O - "$url" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' >> "$BLOCKLIST_FILE"
+        echo "Baixando $url..."
+        wget -q -O - "$url" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' >> "$BLOCKLIST_FILE"
     done
 
     # Remover IPs duplicados
-    sort -u -o "$BLOCKLIST_FILE" "$BLOCKLIST_FILE"
+    if [ -s "$BLOCKLIST_FILE" ]; then
+        sort -u -o "$BLOCKLIST_FILE" "$BLOCKLIST_FILE"
+    fi
 }
 
 # Verificar se a lista de bloqueio existe e tem menos de 48 horas
-BLOCKLIST_FILE="combined_blocklist.txt"
-if [ ! -e "$BLOCKLIST_FILE" ] || [ $(find "$BLOCKLIST_FILE" -mmin +2880) ]; then
+BLOCKLIST_FILE="/tmp/combined_blocklist.txt"
+# Se não existe ou é mais velho que 2 dias (48h*60m=2880m)
+if [ ! -e "$BLOCKLIST_FILE" ] || [ -n "$(find "$BLOCKLIST_FILE" -mmin +2880)" ]; then
     echo "Atualizando a lista de bloqueio..."
     update_blocklist
 else
@@ -95,7 +101,7 @@ fi
 # Adicionar IPs ao iptables (Otimizado com ipset)
 echo "Configurando ipset..."
 # Criar o set se não existir
-ipset create blocklist hash:ip hashsize 4096 -exist
+sudo ipset create blocklist hash:ip hashsize 4096 -exist
 
 # Usar ipset restore para carregar IPs em massa
 IPSET_RESTORE_FILE=$(mktemp)
@@ -105,18 +111,24 @@ if [ -f "$BLOCKLIST_FILE" ]; then
 fi
 
 # Aplicar ipset
-ipset restore < "$IPSET_RESTORE_FILE"
+sudo ipset restore < "$IPSET_RESTORE_FILE"
 rm "$IPSET_RESTORE_FILE"
 
 # Adicionar regra ao iptables para usar o set
-iptables -A INPUT -m set --match-set blocklist src -j DROP
+# Verifica se a regra já existe para evitar duplicatas
+if ! sudo iptables -C INPUT -m set --match-set blocklist src -j DROP 2>/dev/null; then
+    sudo iptables -A INPUT -m set --match-set blocklist src -j DROP
+fi
 
 # Configurar limites de taxa no Nginx (substitua pela sua configuração)
-echo "limit_req_zone \$binary_remote_addr zone=req_limit:10m rate=5r/s;" > /etc/nginx/conf.d/limit_req.conf
+if [ -d /etc/nginx/conf.d ]; then
+    echo "limit_req_zone \$binary_remote_addr zone=req_limit:10m rate=5r/s;" | sudo tee /etc/nginx/conf.d/limit_req.conf
+fi
 
 # Configurar mod_evasive para proteção contra ataques de solicitações excessivas no Apache
-apt-get install -y libapache2-mod-evasive
-cat <<EOL > /etc/apache2/mods-available/evasive.conf
+echo "Instalando mod_evasive..."
+sudo apt-get install -y libapache2-mod-evasive
+cat <<EOL | sudo tee /etc/apache2/mods-available/evasive.conf
 <IfModule mod_evasive20.c>
     DOSHashTableSize    3097
     DOSPageCount        2
@@ -126,15 +138,19 @@ cat <<EOL > /etc/apache2/mods-available/evasive.conf
     DOSBlockingPeriod   10
 </IfModule>
 EOL
-a2enmod evasive
-service apache2 restart
+# Habilitar módulo se disponível (em alguns sistemas já vem habilitado)
+if [ -f /usr/sbin/a2enmod ]; then
+    sudo a2enmod evasive
+fi
+sudo service apache2 restart
 
 # Configurar limites de taxa no iptables
-iptables -A INPUT -p tcp -m tcp --syn -m connlimit --connlimit-above 50 -j DROP
-iptables -A INPUT -p tcp -m tcp --dport 80 -i eth0 -m state --state NEW -m recent --set
-iptables -A INPUT -p tcp -m tcp --dport 80 -i eth0 -m state --state NEW -m recent --update --seconds 60 --hitcount 20 -j DROP
-
-# Configurar proteção contra ataques de negação de serviço (DDoS) no ModSecurity
-SecRuleEngine On
+sudo iptables -A INPUT -p tcp -m tcp --syn -m connlimit --connlimit-above 50 -j DROP
+# Regras baseadas em interface (assume eth0, pode falhar se não existir)
+INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
+if [ -n "$INTERFACE" ]; then
+    sudo iptables -A INPUT -p tcp -m tcp --dport 80 -i "$INTERFACE" -m state --state NEW -m recent --set
+    sudo iptables -A INPUT -p tcp -m tcp --dport 80 -i "$INTERFACE" -m state --state NEW -m recent --update --seconds 60 --hitcount 20 -j DROP
+fi
 
 echo "Script concluído!"

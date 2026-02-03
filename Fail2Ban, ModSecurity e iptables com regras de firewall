@@ -18,11 +18,11 @@
 ###################################################################################################################
 
 # Instalar e configurar Fail2Ban
-apt-get update
-apt-get install -y fail2ban
+sudo apt-get update
+sudo apt-get install -y fail2ban
 
 # Configurar jail.local para SSH e Apache
-cat <<EOL > /etc/fail2ban/jail.local
+cat <<EOL | sudo tee /etc/fail2ban/jail.local
 [sshd]
 enabled = true
 
@@ -31,36 +31,45 @@ enabled = true
 EOL
 
 # Reiniciar Fail2Ban
-service fail2ban restart
+sudo service fail2ban restart
 
 # Instalar e configurar ModSecurity
-apt-get install -y libapache2-modsecurity
-cp /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf
+sudo apt-get install -y libapache2-mod-security2
+if [ -f /etc/modsecurity/modsecurity.conf-recommended ]; then
+    sudo cp /etc/modsecurity/modsecurity.conf-recommended /etc/modsecurity/modsecurity.conf
+fi
 
 # Configurar SecRuleEngine
-sed -i 's/SecRuleEngine DetectionOnly/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
+sudo sed -i 's/SecRuleEngine DetectionOnly/SecRuleEngine On/' /etc/modsecurity/modsecurity.conf
 
 # Reiniciar Apache
-service apache2 restart
+sudo service apache2 restart
 
-# Configurar iptables para bloquear tráfego de IP específico (substitua pelo IP real)
-iptables -A INPUT -s IP_MALICIOSO -j DROP
+# Configurar iptables para bloquear tráfego de IP específico (Exemplo)
+# sudo iptables -A INPUT -s 1.2.3.4 -j DROP
 
 # Configurar iptables para mitigar ataques DDoS (limitar conexões)
-iptables -A INPUT -p tcp --syn -m connlimit --connlimit-above 50 -j DROP
+sudo iptables -A INPUT -p tcp --syn -m connlimit --connlimit-above 50 -j DROP
 
-# Configurar iptables para limitar a taxa de novas conexões (substitua pela sua interface)
-iptables -A INPUT -p tcp --dport 80 -i eth0 -m state --state NEW -m recent --set
-iptables -A INPUT -p tcp --dport 80 -i eth0 -m state --state NEW -m recent --update --seconds 60 --hitcount 20 -j DROP
+# Configurar iptables para limitar a taxa de novas conexões
+INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
+if [ -n "$INTERFACE" ]; then
+    sudo iptables -A INPUT -p tcp --dport 80 -i "$INTERFACE" -m state --state NEW -m recent --set
+    sudo iptables -A INPUT -p tcp --dport 80 -i "$INTERFACE" -m state --state NEW -m recent --update --seconds 60 --hitcount 20 -j DROP
+fi
 
 # Configurar iptables para evitar ataques ICMP e UDP flood
-iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT
-iptables -A INPUT -p icmp -j DROP
-iptables -A INPUT -p udp --dport 53 -m limit --limit 1/s -j ACCEPT
-iptables -A INPUT -p udp -j DROP
+sudo iptables -A INPUT -p icmp --icmp-type echo-request -m limit --limit 1/s -j ACCEPT
+sudo iptables -A INPUT -p icmp -j DROP
+sudo iptables -A INPUT -p udp --dport 53 -m limit --limit 1/s -j ACCEPT
+sudo iptables -A INPUT -p udp -j DROP
 
-# Salvar regras iptables
-service netfilter-persistent save
-service netfilter-persistent reload
+# Salvar regras iptables (tenta usar iptables-save se netfilter-persistent falhar)
+if command -v netfilter-persistent &> /dev/null; then
+    sudo service netfilter-persistent save
+    sudo service netfilter-persistent reload
+else
+    sudo iptables-save | sudo tee /etc/iptables/rules.v4
+fi
 
 echo "Script concluído!"

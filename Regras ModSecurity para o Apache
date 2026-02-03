@@ -17,22 +17,21 @@
 # ___|___|___|___|___|___|___|___|___|___|___|___|__                                                             ##
 ###################################################################################################################
 
-# Verificar se o ModSecurity está instalado
+# Verificar se o Apache está instalado
 if ! command -v apachectl &> /dev/null; then
     echo "O Apache não está instalado. Instale-o e configure o ModSecurity manualmente."
-    exit 1
-fi
+else
+    # Instalar o ModSecurity e o ModSecurity para o Apache
+    sudo apt-get update
+    sudo apt-get install -y libapache2-mod-security2
 
-# Instalar o ModSecurity e o ModSecurity para o Apache
-apt-get update
-apt-get install -y libapache2-mod-security2
+    # Criar um diretório para regras personalizadas (se não existir)
+    if [ ! -d /etc/apache2/modsecurity.d ]; then
+        sudo mkdir -p /etc/apache2/modsecurity.d
+    fi
 
-# Criar um diretório para regras personalizadas
-mkdir /etc/apache2/modsecurity.d
-touch /etc/apache2/modsecurity.d/owasp-crs-custom-rules.conf
-
-# Adicionar regras ModSecurity personalizadas
-cat <<EOL >> /etc/apache2/modsecurity.d/owasp-crs-custom-rules.conf
+    # Adicionar regras ModSecurity personalizadas
+    cat <<EOL | sudo tee /etc/apache2/modsecurity.d/owasp-crs-custom-rules.conf
 
 # --- Início das Regras ModSecurity Personalizadas ---
 
@@ -48,31 +47,31 @@ SecRule ARGS|REQUEST_HEADERS|REQUEST_HEADERS_NAMES "(\.\.\/|etc\/passwd|proc\/se
 # Proteção Geral
 SecRule ARGS|REQUEST_URI|REQUEST_HEADERS|REQUEST_HEADERS_NAMES "(eval\(|system\(|passthru\(|shell_exec\(|exec\(|base64_decode\(|phpinfo\()" "id:1004,phase:2,deny,status:500,msg:'Common Attack Keywords'"
 
-Detectar Tentativas de Comandos de Sistema
+# Detectar Tentativas de Comandos de Sistema
 SecRule REQUEST_URI|REQUEST_HEADERS|REQUEST_HEADERS_NAMES "(\/bin\/sh|\/bin\/bash|\/bin\/dash|\/bin\/ash|\/bin\/ksh|\/bin\/csh)" "id:1005,phase:2,deny,status:500,msg:'System Command Execution Attempt'"
 
-Bloquear Envio de Informações Sensíveis
+# Bloquear Envio de Informações Sensíveis
 SecRule REQUEST_COOKIES|ARGS|REQUEST_HEADERS_NAMES "password|credit_card" "id:1006,phase:2,deny,status:500,msg:'Sensitive Information Exposure'"
 
-Bloquear Upload de Arquivos Executáveis:
+# Bloquear Upload de Arquivos Executáveis:
 SecRule FILES "(\.php|\.pl|\.cgi|\.exe)" "id:1007,phase:2,deny,status:500,msg:'Executable File Upload Attempt'"
 
-Bloquear Escaneamento de Portas com nmap
+# Bloquear Escaneamento de Portas com nmap
 SecRule REQUEST_URI "nmap" "id:1008,phase:2,deny,status:500,msg:'Port Scanning Attempt'"
 
-Bloquear Bots de Scraping
+# Bloquear Bots de Scraping
 SecRule REQUEST_HEADERS:User-Agent "(bot|crawler)" "id:1009,phase:2,deny,status:500,msg:'Web Scraping Bot'"
 
-Bloquear Tentativas de Força Bruta no Formulário de Login
+# Bloquear Tentativas de Força Bruta no Formulário de Login
 SecRule REQUEST_URI "/login" "id:1010,phase:2,deny,status:500,msg:'Brute Force Login Attempt'"
-
-
 
 # --- Fim das Regras ModSecurity Personalizadas ---
 
 EOL
 
-# Reiniciar o Apache para aplicar as configurações
-service apache2 restart
+    # Habilitar o módulo e reiniciar o Apache
+    sudo a2enmod security2
+    sudo service apache2 restart
 
-echo "Regras ModSecurity aplicadas com sucesso!"
+    echo "Regras ModSecurity aplicadas com sucesso!"
+fi

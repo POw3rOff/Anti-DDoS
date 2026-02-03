@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 ############ EXTRA STUFF TO HELP HIGH TRAFFIC (DDOS) ##################
@@ -22,43 +21,41 @@
 LIST_URLS=(
     "https://www.spamhaus.org/drop/drop.txt"
     "https://feeds.dshield.org/top10-2.txt"
-    "https://www.openbl.org/lists/base.txt"
-    "https://talosintelligence.com/documents/ip-blacklist"
     "https://lists.blocklist.de/lists/all.txt"
 )
 
 # Nome do arquivo de saída
-OUTPUT_FILE="combined_blocklist.txt"
-
-# Diretório onde o script está localizado
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+OUTPUT_FILE="/tmp/combined_blocklist.txt"
 
 # Limpar regras existentes
-iptables -F
-iptables -X
+sudo iptables -F
+sudo iptables -X
 
 # Definir política padrão para DROP (bloquear tudo por padrão)
-iptables -P INPUT DROP
-iptables -P FORWARD DROP
-iptables -P OUTPUT ACCEPT
+sudo iptables -P INPUT DROP
+sudo iptables -P FORWARD DROP
+sudo iptables -P OUTPUT ACCEPT
 
 # Permitir tráfego na interface de loopback
-iptables -A INPUT -i lo -j ACCEPT
-iptables -A OUTPUT -o lo -j ACCEPT
+sudo iptables -A INPUT -i lo -j ACCEPT
+sudo iptables -A OUTPUT -o lo -j ACCEPT
 
-# Permitir tráfego SSH (substitua PORTA_SSH pelo número da porta desejado)
-iptables -A INPUT -p tcp --dport PORTA_SSH -j ACCEPT
+# Permitir tráfego SSH (substitua PORTA_SSH pelo número da porta desejado, ex: 22)
+sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT
 
 # Permitir tráfego HTTP e HTTPS
-iptables -A INPUT -p tcp --dport 80 -j ACCEPT
-iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 
 # Função para baixar e combinar as listas
 update_lists() {
+    > "$OUTPUT_FILE"
     for url in "${LIST_URLS[@]}"; do
-        wget -O - "$url" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' >> "$OUTPUT_FILE"
+        wget -q -O - "$url" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' >> "$OUTPUT_FILE"
     done
-    sort -u -o "$OUTPUT_FILE" "$OUTPUT_FILE"
+    if [ -s "$OUTPUT_FILE" ]; then
+        sort -u -o "$OUTPUT_FILE" "$OUTPUT_FILE"
+    fi
 }
 
 # Atualizar as listas apenas se o arquivo não existir ou tiver mais de 48 horas
@@ -67,14 +64,28 @@ if [ ! -e "$OUTPUT_FILE" ] || [ "$(find "$OUTPUT_FILE" -mmin +2880)" ]; then
 fi
 
 # Adicionar IPs ao iptables
-while IFS= read -r ip; do
-    iptables -A INPUT -s "$ip" -j DROP
-done < "$OUTPUT_FILE"
+if [ -f "$OUTPUT_FILE" ]; then
+    # Usar ipset para melhor performance se disponível
+    if command -v ipset &>/dev/null; then
+        sudo ipset create blocklist hash:ip hashsize 4096 -exist
+        while IFS= read -r ip; do
+            sudo ipset add blocklist "$ip" -exist
+        done < "$OUTPUT_FILE"
+        sudo iptables -A INPUT -m set --match-set blocklist src -j DROP
+    else
+        while IFS= read -r ip; do
+            sudo iptables -A INPUT -s "$ip" -j DROP
+        done < "$OUTPUT_FILE"
+    fi
+fi
 
-# Configurar ModSecurity (substitua o caminho do arquivo de configuração conforme necessário)
-echo "Include modsecurity.conf" >> /etc/apache2/apache2.conf
-
-# Reiniciar Apache para aplicar as configurações do ModSecurity
-service apache2 restart
+# Configurar ModSecurity (se instalado)
+if [ -d /etc/apache2 ]; then
+    # Habilitar ModSecurity se o arquivo de configuração existir
+    if [ ! -f /etc/apache2/mods-enabled/security2.conf ] && [ -f /etc/apache2/mods-available/security2.conf ]; then
+        sudo a2enmod security2
+    fi
+    sudo service apache2 restart
+fi
 
 echo "Script concluído!"
