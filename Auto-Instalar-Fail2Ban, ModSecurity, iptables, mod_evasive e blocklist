@@ -26,6 +26,13 @@ if ! command -v iptables &> /dev/null; then
     apt-get install -y iptables
 fi
 
+# Verificar se o ipset está instalado e instalá-lo se necessário
+if ! command -v ipset &> /dev/null; then
+    echo "Ipset não está instalado. Instalando..."
+    apt-get update
+    apt-get install -y ipset
+fi
+
 # Instalar e configurar Fail2Ban
 apt-get update
 apt-get install -y fail2ban
@@ -85,10 +92,24 @@ else
     echo "A lista de bloqueio ainda está atualizada."
 fi
 
-# Adicionar IPs ao iptables
-while IFS= read -r ip; do
-    iptables -A INPUT -s "$ip" -j DROP
-done < "$BLOCKLIST_FILE"
+# Adicionar IPs ao iptables (Otimizado com ipset)
+echo "Configurando ipset..."
+# Criar o set se não existir
+ipset create blocklist hash:ip hashsize 4096 -exist
+
+# Usar ipset restore para carregar IPs em massa
+IPSET_RESTORE_FILE=$(mktemp)
+echo "create blocklist hash:ip hashsize 4096 -exist" > "$IPSET_RESTORE_FILE"
+if [ -f "$BLOCKLIST_FILE" ]; then
+    grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' "$BLOCKLIST_FILE" | sed 's/^/add blocklist /' >> "$IPSET_RESTORE_FILE"
+fi
+
+# Aplicar ipset
+ipset restore < "$IPSET_RESTORE_FILE"
+rm "$IPSET_RESTORE_FILE"
+
+# Adicionar regra ao iptables para usar o set
+iptables -A INPUT -m set --match-set blocklist src -j DROP
 
 # Configurar limites de taxa no Nginx (substitua pela sua configuração)
 echo "limit_req_zone \$binary_remote_addr zone=req_limit:10m rate=5r/s;" > /etc/nginx/conf.d/limit_req.conf
