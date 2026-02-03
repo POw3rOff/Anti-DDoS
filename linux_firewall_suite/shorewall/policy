@@ -1,0 +1,5 @@
+# /etc/shorewall/policy
+# Source Dest  Policy  LogLevel
+fw      net   ACCEPT
+net     all   DROP    info
+all     all   REJECT  info
