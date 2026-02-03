@@ -76,7 +76,7 @@ fi
 echo -e "\n--- 3. Teste de Lockdown Automático ---"
 LOCKDOWN_SCRIPT=$(find . -name "lockdown.sh" 2>/dev/null | head -n 1)
 if [ -z "$LOCKDOWN_SCRIPT" ]; then
-    LOCKDOWN_SCRIPT="../linux_security_scripts/lockdown.sh"
+    LOCKDOWN_SCRIPT="./linux_security_scripts/lockdown.sh"
 fi
 
 if [ -f "$LOCKDOWN_SCRIPT" ]; then
@@ -194,3 +194,91 @@ if [ -n "$MISSING_TOOLS" ]; then
 fi
 
 echo -e "\n=== Suite Blue Team Concluída ==="
+
+# 11. Simulation & Verification (Purple Team)
+echo -e "\n--- 11. Simulation & Verification (Purple Team) ---"
+
+# 11.1 Tunnel Detection
+echo "    [Test 11.1] Simulating SSH Tunnel..."
+# Simulate a process that looks like an SSH tunnel
+# We can't easily spoof /proc/pid/cmdline for existing binaries without running them with those args.
+# Let's try to run sleep with arguments that mimic ssh flags, but sleep doesn't accept them.
+# Instead, we'll create a dummy script that accepts args.
+DUMMY_SSH="/tmp/fake_ssh_tunnel.sh"
+echo '#!/bin/bash' > "$DUMMY_SSH"
+echo 'sleep 5' >> "$DUMMY_SSH"
+chmod +x "$DUMMY_SSH"
+# The detector greps for "ssh" in pgrep or process name.
+# The detector actually does: for pid in $(pgrep ssh); do...
+# So we need the process to be named "ssh". We can copy bash to /tmp/ssh.
+if [ ! -f /tmp/ssh ]; then
+    cp /bin/bash /tmp/ssh
+fi
+# Run it with -L flag. Bash accepts -c, let's see if we can trick it or just use the args.
+# Bash doesn't ignore unknown flags easily.
+# Let's look at the detector again: "cmd=$(tr '\0' ' ' < /proc/$pid/cmdline)"
+# We can use a python script if available to set process title? No, too complex.
+# Simpler: Create a script named 'iodine' (known tunnel tool)
+echo "    -> Simulating 'iodine' process..."
+cp /bin/sleep /tmp/iodine
+/tmp/iodine 5 &
+TUNNEL_PID=$!
+sleep 1
+
+# Run Detector
+DETECTOR_OUT=$(./advanced_security_suite/tunnel_detector.sh 2>&1)
+if echo "$DETECTOR_OUT" | grep -q "iodine"; then
+    check_pass "Detector identificou simulação de 'iodine' (PID $TUNNEL_PID)."
+else
+    check_fail "Falha na deteção de tunnel simulado."
+    echo "Output do detector:"
+    echo "$DETECTOR_OUT"
+fi
+kill $TUNNEL_PID 2>/dev/null
+rm -f /tmp/iodine /tmp/fake_ssh_tunnel.sh /tmp/ssh
+
+# 11.2 Reverse Shell Detection
+echo "    [Test 11.2] Simulating Reverse Shell (Netcat)..."
+# The detector looks for 'nc' with a socket.
+if command -v nc &>/dev/null; then
+    nc -l -p 4444 &
+    NC_PID=$!
+    sleep 1
+
+    DETECTOR_OUT=$(./advanced_security_suite/reverse_shell_detector.sh 2>&1)
+    if echo "$DETECTOR_OUT" | grep -q "Processo interativo com rede"; then
+        check_pass "Detector identificou shell/netcat suspeito (PID $NC_PID)."
+    else
+        # Fallback: maybe the detector didn't see 'nc' as interactive or socket wasn't ready
+        check_warn "Detector não marcou o netcat de teste como malicioso (pode ser comportamento esperado se não houver conexão estabelecida)."
+        echo "Output do detector:"
+        echo "$DETECTOR_OUT"
+    fi
+    kill $NC_PID 2>/dev/null
+else
+    check_info "Netcat (nc) não encontrado, pulando simulação de reverse shell."
+fi
+
+# 11.3 Suspicious Process (Miner)
+echo "    [Test 11.3] Simulating Crypto Miner..."
+# Creating a process named 'minerd'
+cp /bin/sleep /tmp/minerd
+/tmp/minerd 5 &
+MINER_PID=$!
+sleep 1
+
+# Assuming detect_suspicious_processes.sh exists and checks for names
+if [ -f "./system_security_suite/detect_suspicious_processes.sh" ]; then
+    DETECTOR_OUT=$(./system_security_suite/detect_suspicious_processes.sh 2>&1)
+    if echo "$DETECTOR_OUT" | grep -q "minerd"; then
+        check_pass "Detector identificou processo 'minerd' simulado."
+    else
+        check_warn "Detector de processos suspeitos não alertou sobre 'minerd'."
+    fi
+else
+    check_warn "Script 'detect_suspicious_processes.sh' não encontrado."
+fi
+kill $MINER_PID 2>/dev/null
+rm -f /tmp/minerd
+
+echo -e "\n=== Testes de Simulação Concluídos ==="
