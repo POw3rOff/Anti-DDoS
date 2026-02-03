@@ -58,7 +58,7 @@ function disable_protection() {
 function exit_script() {
     clear_firewall_rules
     echo "Saindo do script. Adeus!"
-    echo "Lembre-se de testar o script em um ambiente controlado antes de aplicá-lo em um ambiente de produção para evitar bloqueios inesperados."    
+    echo "Lembre-se de testar o script em um ambiente controlado antes de aplicá-lo em um ambiente de produção para evitar bloqueios inesperados."
     exit 0
 }
 
@@ -299,17 +299,29 @@ function apply_blacklist_count() {
 
     blocked_ips=0  # Contador de IPs bloqueados
 
-    while read -r ip; do
-        # Verificar se o IP já atingiu a contagem máxima nos últimos 60 segundos
-        iptables -A RECENT_BLACKLIST -m recent --rcheck --seconds 60 --hitcount 5 --name blacklist --rsource -j RETURN
+    if [ -f /tmp/combined_blacklist.txt ]; then
+        while read -r ip; do
+            # Verificar se o IP já atingiu a contagem máxima nos últimos 60 segundos
+            iptables -A RECENT_BLACKLIST -m recent --rcheck --seconds 60 --hitcount 5 --name blacklist --rsource -j RETURN
 
-        # Adicionar o IP à lista recente e aplicar a regra de bloqueio
-        iptables -A RECENT_BLACKLIST -m recent --set --name blacklist --rsource
-        iptables -A INPUT -s "$ip" -j DROP
+            # Adicionar o IP à lista recente e aplicar a regra de bloqueio
+            iptables -A RECENT_BLACKLIST -m recent --set --name blacklist --rsource
+            iptables -A INPUT -s "$ip" -j DROP
 
-        blocked_ips=$((blocked_ips + 1))
-    done < /tmp/combined_blacklist.txt
+            blocked_ips=$((blocked_ips + 1))
+        done < /tmp/combined_blacklist.txt
+    else
+        echo "Arquivo /tmp/combined_blacklist.txt não encontrado."
+    fi
 
+    # Limpar a tabela recente no final
+    iptables -D RECENT_BLACKLIST -j RETURN
+    iptables -F RECENT_BLACKLIST
+    iptables -X RECENT_BLACKLIST
+
+    echo "Lista de bloqueio aplicada ao iptables com contagem."
+    echo "Total de IPs bloqueados: $blocked_ips"
+}
 
 # Função para adicionar regras de rastreamento do iptables
 function iptables_track_rule() {
@@ -319,12 +331,6 @@ function iptables_track_rule() {
     iptables -A $chain_name -j LOG --log-prefix "IPTABLES_TRACK: "
     iptables -A $chain_name -j DROP
 }
-    # Adiciona regras iptables de rastreamento
-    iptables_track_rule "TRACK_PROWLER"
-    iptables_track_rule "TRACK_ATTACKER"
-
-    # Configurações do kernel
-    configure_kernel_settings
 
 # Função para configurar configurações do kernel
 function configure_kernel_settings() {
@@ -337,11 +343,8 @@ function configure_kernel_settings() {
     # Habilita ou desabilita as teclas SysRq. Se definido como 1, as teclas SysRq estão habilitadas.
     sysctl -w kernel.sysrq=0
 
-    # ... (Outras configurações do kernel)
-
     # Define se o sistema filtra pacotes com endereços de origem falsificados.
     sysctl -w net.ipv4.conf.all.rp_filter=1
-}
 
     # Configurações do firewall no kernel
     sysctl -w kernel.shmmax=4294967296
@@ -415,18 +418,6 @@ function configure_kernel_settings() {
     sysctl -w net.ipv4.conf.all.rp_filter=1
 }
 
-# Chama a função para configurar regras complexas
-configure_complex_rules
-
-    # Limpar a tabela recente no final
-    iptables -D RECENT_BLACKLIST -j RETURN
-    iptables -F RECENT_BLACKLIST
-    iptables -X RECENT_BLACKLIST
-
-    echo "Lista de bloqueio aplicada ao iptables com contagem."
-    echo "Total de Filhos da puta (IPs) bloqueados: $blocked_ips"
-}
-
 function clear_firewall_rules() {
     # Limpar regras de firewall aqui
     iptables -F
@@ -437,5 +428,3 @@ function clear_firewall_rules() {
 while true; do
     show_menu
 done
-
-

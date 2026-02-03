@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 ############ EXTRA STUFF TO HELP HIGH TRAFFIC (DDOS) ##################
 
@@ -21,29 +21,29 @@
 ############# Personalize aqui ###############
 ####################################################
 
-Porta SSH padrão (também pode ser usada para FTP)
+# Porta SSH padrão (também pode ser usada para FTP)
 SSH_PORT="21:23"
 
-Portas do servidor de jogos (Isso cuidará dos blocos RCON e pacotes inválidos.
+# Portas do servidor de jogos (Isso cuidará dos blocos RCON e pacotes inválidos.
 GAMESERVERPORTS="27015:27016"
 
-Seu endereço IP residencial, este é apenas para RCON remoto através do HLSW, pois você pode usar o comando !rcon no servidor como administrador. (http://www.whatismyip.com/)
-Lembre-se de rolar para baixo e adicionar um # na frente das linhas que usam YOUR_HOME_IP se você não for usar isso.
-YOUR_HOME_IP="xxx.xxx.xxx.xxx"
+# Seu endereço IP residencial, este é apenas para RCON remoto através do HLSW, pois você pode usar o comando !rcon no servidor como administrador. (http://www.whatismyip.com/)
+# Lembre-se de rolar para baixo e adicionar um # na frente das linhas que usam YOUR_HOME_IP se você não for usar isso.
+YOUR_HOME_IP="127.0.0.1"
 
-Quaisquer máquinas ou usuários adicionais que você deseja permitir acesso ilimitado à máquina em que o servidor está hospedado.
-Lembre-se de rolar para baixo e remover o # na frente das linhas que usam WHITELISTED_IPS se você for usar isso
-WHITELISTED_IPS="xxx.xxx.xxx.xxx"
+# Quaisquer máquinas ou usuários adicionais que você deseja permitir acesso ilimitado à máquina em que o servidor está hospedado.
+# Lembre-se de rolar para baixo e remover o # na frente das linhas que usam WHITELISTED_IPS se você for usar isso
+WHITELISTED_IPS="127.0.0.1"
 
-Portas UDP que você deseja proteger, 3306 (MySQL) e 64738 (Mumble) são comumente usadas aqui.
-Adicione servidores de jogos também, caso uma inundação de pacotes válidos chegue (escapou da defesa)
-Para adicionar um intervalo de porta use ":", exemplo: "27015:27022"
-Você também pode adicionar intervalos de portas e portas únicas, exemplo: "27015:27022,80"
+# Portas UDP que você deseja proteger, 3306 (MySQL) e 64738 (Mumble) são comumente usadas aqui.
+# Adicione servidores de jogos também, caso uma inundação de pacotes válidos chegue (escapou da defesa)
+# Para adicionar um intervalo de porta use ":", exemplo: "27015:27022"
+# Você também pode adicionar intervalos de portas e portas únicas, exemplo: "27015:27022,80"
 UDP_PORTS_PROTECTION="80,443,27015"
 
-Portas TCP que você deseja proteger (Remova o # se quiser proteger algumas portas, também remova o # nas regras iptables reais abaixo.
-Para adicionar um intervalo de porta use ":", exemplo: "27015:27022"
-Você também pode adicionar intervalos de portas e portas únicas, exemplo: "27015:27022,80"
+# Portas TCP que você deseja proteger (Remova o # se quiser proteger algumas portas, também remova o # nas regras iptables reais abaixo.
+# Para adicionar um intervalo de porta use ":", exemplo: "27015:27022"
+# Você também pode adicionar intervalos de portas e portas únicas, exemplo: "27015:27022,80"
 ########## Lembre-se de rolar para baixo e remover o # na frente das linhas que usam TCP_PORTS_PROTECTION se você for usar isso.
 TCP_PORTS_PROTECTION="80,443,27015"
 
@@ -51,9 +51,9 @@ TCP_PORTS_PROTECTION="80,443,27015"
 ############# Personalização termina aqui ##############
 ##########################################################
 
-Limpe as regras primeiro!
+# Limpe as regras primeiro!
 #######################################################################
-sudo service iptables restart
+# sudo service iptables restart
 iptables -P INPUT ACCEPT
 iptables -P FORWARD ACCEPT
 iptables -P OUTPUT ACCEPT
@@ -65,14 +65,14 @@ iptables -t mangle -F
 iptables -t mangle -X
 #######################################################################
 
-Políticas
+# Políticas
 #######################################################################
 iptables -P INPUT DROP
 iptables -P FORWARD DROP
 iptables -P OUTPUT ACCEPT
 #######################################################################
 
-Crie filtros
+# Crie filtros
 #######################################################################
 iptables -N UDPfilter
 iptables -N TCPfilter
@@ -81,13 +81,10 @@ iptables -N LOGFRAGMENTED
 iptables -N LOGTCP
 iptables -N LOGBANNEDIP
 
-Crie regras de filtro
+# Crie regras de filtro
 #######################################################################
 iptables -A INPUT -i lo -p all -j ACCEPT
 iptables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
 iptables -A UDPfilter -m state --state NEW -m hashlimit --hashlimit-upto 1/sec --hashlimit-burst 5 --hashlimit-mode srcip,dstport --hashlimit-name UDPDOSPROTECT --hashlimit-htable-expire 60000 --hashlimit-htable-max 999999999 -j ACCEPT
 iptables -A TCPfilter -m state --state NEW -m hashlimit --hashlimit-upto 1/sec --hashlimit-burst 5 --hashlimit-mode srcip,dstport --hashlimit-name TCPDOSPROTECT --hashlimit-htable-expire 60000 --hashlimit-htable-max 999999999 -j ACCEPT
-iptables -A LOGINVALID -m limit --limit 60/min -j LOG --log-prefix "
-
-#######################################################################
-#######################################################################
+iptables -A LOGINVALID -m limit --limit 60/min -j LOG --log-prefix "Invalid Packet: "
