@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Suite de Testes de Resistência do Sistema (41-50)
+# Suite de Testes de Resistência do Sistema (41-60)
 #
 # Este script executa verificações de segurança para garantir a resiliência do sistema
 # contra falhas comuns, configurações incorretas e vetores de ataque persistentes.
@@ -11,7 +11,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo "=== Iniciando Testes de Resistência do Sistema (41-50) ==="
+echo "=== Iniciando Testes de Resistência do Sistema (41-60) ==="
 echo "Data: $(date)"
 echo ""
 
@@ -192,3 +192,125 @@ check_mount_option "/tmp"
 check_mount_option "/dev/shm"
 
 echo -e "\n=== Testes Concluídos ==="
+
+# 51. Teste de ASLR (Address Space Layout Randomization)
+echo -e "\n--- Teste 51: Status do ASLR ---"
+ASLR_VAL=$(sysctl -n kernel.randomize_va_space 2>/dev/null)
+if [ "$ASLR_VAL" == "2" ]; then
+    check_pass "ASLR está habilitado e configurado para 2 (Full)."
+elif [ "$ASLR_VAL" == "1" ]; then
+    check_warn "ASLR está habilitado parcialmente (1). Recomendado: 2."
+else
+    check_fail "ASLR está DESABILITADO (0) ou não encontrado."
+fi
+
+# 52. Teste de Core Dumps (Vazamento de Memória)
+echo -e "\n--- Teste 52: Restrição de Core Dumps ---"
+CORE_LIMIT=$(grep "hard core" /etc/security/limits.conf 2>/dev/null | grep "0")
+SYSCTL_CORE=$(sysctl -n fs.suid_dumpable 2>/dev/null)
+
+if [ "$SYSCTL_CORE" == "0" ]; then
+    check_pass "fs.suid_dumpable está desabilitado (0)."
+else
+    check_warn "fs.suid_dumpable não é 0 (Atual: $SYSCTL_CORE)."
+fi
+
+# 53. Teste de Presença/Restrição de Compiladores
+echo -e "\n--- Teste 53: Disponibilidade de Compiladores ---"
+if command -v gcc &>/dev/null || command -v make &>/dev/null; then
+    # Check permissions (heuristic: executable by others?)
+    GCC_PATH=$(command -v gcc)
+    if [ -x "$GCC_PATH" ]; then
+        PERMS=$(stat -c %a "$GCC_PATH")
+        check_warn "Compiladores detectados ($GCC_PATH) e executáveis ($PERMS). Risco em produção."
+    fi
+else
+    check_pass "Compiladores (gcc/make) não encontrados no PATH padrão."
+fi
+
+# 54. Teste de Bloqueio de USB Storage
+echo -e "\n--- Teste 54: Bloqueio de USB Storage ---"
+if grep -q "usb-storage" /etc/modprobe.d/* 2>/dev/null; then
+    check_pass "Regra de bloqueio para usb-storage encontrada em modprobe.d."
+else
+    # Check loaded modules
+    if lsmod 2>/dev/null | grep -q "usb_storage"; then
+        check_fail "Módulo usb_storage está carregado!"
+    else
+        check_warn "Nenhuma regra explícita de bloqueio de USB encontrada, mas módulo não está carregado."
+    fi
+fi
+
+# 55. Teste de Proteção de Ponteiros de Kernel (kptr_restrict)
+echo -e "\n--- Teste 55: Kernel Pointer Restriction ---"
+KPTR=$(sysctl -n kernel.kptr_restrict 2>/dev/null)
+if [ "$KPTR" == "2" ]; then
+    check_pass "kernel.kptr_restrict configurado para 2 (Máximo)."
+elif [ "$KPTR" == "1" ]; then
+    check_pass "kernel.kptr_restrict configurado para 1 (Aceitável)."
+else
+    check_fail "kernel.kptr_restrict é 0 ou desabilitado."
+fi
+
+# 56. Teste de Redirecionamento ICMP (Network Hardening)
+echo -e "\n--- Teste 56: ICMP Redirects ---"
+REDIRECTS=$(sysctl -n net.ipv4.conf.all.accept_redirects 2>/dev/null)
+if [ "$REDIRECTS" == "0" ]; then
+    check_pass "ICMP Redirects desabilitados (net.ipv4.conf.all.accept_redirects=0)."
+else
+    check_fail "ICMP Redirects habilitados ($REDIRECTS)."
+fi
+
+# 57. Teste de IP Forwarding
+echo -e "\n--- Teste 57: IP Forwarding ---"
+FWD=$(sysctl -n net.ipv4.ip_forward 2>/dev/null)
+if [ "$FWD" == "0" ]; then
+    check_pass "IP Forwarding desabilitado."
+else
+    check_warn "IP Forwarding habilitado (Risco se não for roteador/gateway)."
+fi
+
+# 58. Teste de Integridade do Sudoers
+echo -e "\n--- Teste 58: Integridade do Sudoers ---"
+if command -v visudo &>/dev/null; then
+    if visudo -c &>/dev/null; then
+        check_pass "Sintaxe do arquivo sudoers validada."
+    else
+        check_fail "Erro de sintaxe encontrado no arquivo sudoers!"
+    fi
+    # Check for NOPASSWD
+    NOPASS_MATCH=$(grep -r "NOPASSWD" /etc/sudoers /etc/sudoers.d 2>/dev/null)
+    if [ -n "$NOPASS_MATCH" ]; then
+        check_warn "Regras NOPASSWD detectadas no sudoers (risco elevado)."
+    else
+        check_pass "Nenhuma regra NOPASSWD encontrada."
+    fi
+else
+    check_warn "Comando visudo não encontrado, pulando validação."
+fi
+
+# 59. Teste de Contas com Senha Vazia
+echo -e "\n--- Teste 59: Contas com Senha Vazia ---"
+EMPTY_PW=$(awk -F: '($2 == "" ) { print $1 }' /etc/shadow 2>/dev/null)
+if [ -z "$EMPTY_PW" ]; then
+    check_pass "Nenhuma conta com senha vazia encontrada em /etc/shadow."
+else
+    check_fail "Contas com senha vazia detectadas: $EMPTY_PW"
+fi
+
+# 60. Teste de Versão do Protocolo SSH
+echo -e "\n--- Teste 60: Versão do Protocolo SSH ---"
+if [ -f /etc/ssh/sshd_config ]; then
+    if grep -q "^Protocol 2" /etc/ssh/sshd_config; then
+        check_pass "SSH configurado explicitamente para Protocolo 2."
+    else
+        # Modern SSH defaults to 2, but check if 1 is enabled
+        if grep -q "Protocol.*1" /etc/ssh/sshd_config; then
+             check_fail "SSH Protocolo 1 detectado!"
+        else
+             check_pass "Nenhuma configuração insegura de protocolo SSH encontrada (Default seguro)."
+        fi
+    fi
+else
+    check_warn "Arquivo /etc/ssh/sshd_config não encontrado."
+fi
