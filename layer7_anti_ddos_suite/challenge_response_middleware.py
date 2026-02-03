@@ -21,7 +21,7 @@ Usage:
 
 import hashlib
 import time
-import random
+import secrets
 import string
 import json
 import sys
@@ -45,7 +45,7 @@ class ChallengeManager:
 
     def generate_pow_challenge(self, ip, difficulty=4):
         """Generates a Proof-of-Work challenge (find nonce where hash starts with N zeros)."""
-        prefix = ''.join(random.choices(string.ascii_letters, k=8))
+        prefix = ''.join(secrets.choice(string.ascii_letters) for _ in range(8))
         target = "0" * difficulty
 
         challenge = {
@@ -83,9 +83,9 @@ class ChallengeManager:
 
     def generate_js_challenge(self, ip):
         """Generates a simple arithmetic/logic challenge for JS."""
-        a = random.randint(10, 99)
-        b = random.randint(10, 99)
-        op = random.choice(["+", "*"])
+        a = 10 + secrets.randbelow(90)
+        b = 10 + secrets.randbelow(90)
+        op = secrets.choice(["+", "*"])
 
         code = f"var a={a}; var b={b}; return a{op}b;"
         expected = a * b if op == "*" else a + b
