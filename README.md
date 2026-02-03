@@ -1,4 +1,4 @@
-Esta suite de segurança implementa um firewall robusto baseado em iptables, desenvolvido por p0w3r0ff para proteger a infraestrutura da Cyber-Gamers. A solução foi exaustivamente testada e validada pela comunidade contra ataques DDoS. Para mais informações, visite https://cyber-gamers.org/
+Esta suite de segurança evoluiu de um firewall robusto baseado em iptables para uma solução completa de hardening e auditoria, desenvolvida por p0w3r0ff para proteger a infraestrutura da Cyber-Gamers. O projeto foi exaustivamente testado e validado pela comunidade contra ataques DDoS e outras ameaças. Para mais informações, visite https://cyber-gamers.org/
 
 ---
 
