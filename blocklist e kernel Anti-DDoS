@@ -78,7 +78,7 @@ allow_countries() {
             echo "Falha ao baixar a lista de IPs para o país $country_code"
             exit 1
         fi
-    
+    done
 }
 
 # Função para bloquear todos os países exceto os permitidos
@@ -145,22 +145,22 @@ echo "Número de IPS bloqueados: $(wc -l "$blocklist_dir/blocklist_combined.txt"
 sed -i '/net.ipv4.conf.*.rp_filter/d' /etc/sysctl.conf
 for dev in $(ls /proc/sys/net/ipv4/conf/); do
     sysctl -w net.ipv4.conf.$dev.rp_filter=1 > /dev/null
-    echo "net.ipv4.conf.$dev.rp_filter=1" >> /etc/sysctl.conf
-done
+    echo "net.ipv4.conf.$dev.rp_filter=1"
+done >> /etc/sysctl.conf
 
 # Recusar pacotes ICMP Redirect
 sed -i '/net.ipv4.conf.*.accept_redirects/d' /etc/sysctl.conf
 for dev in $(ls /proc/sys/net/ipv4/conf/); do
     sysctl -w net.ipv4.conf.$dev.accept_redirects=0 > /dev/null
-    echo "net.ipv4.conf.$dev.accept_redirects=0" >> /etc/sysctl.conf
-done
+    echo "net.ipv4.conf.$dev.accept_redirects=0"
+done >> /etc/sysctl.conf
 
 # Recusar pacotes com roteamento de origem (Source Routed)
 sed -i '/net.ipv4.conf.*.accept_source_route/d' /etc/sysctl.conf
 for dev in $(ls /proc/sys/net/ipv4/conf/); do
     sysctl -w net.ipv4.conf.$dev.accept_source_route=0 > /dev/null
-    echo "net.ipv4.conf.$dev.accept_source_route=0" >> /etc/sysctl.conf
-done
+    echo "net.ipv4.conf.$dev.accept_source_route=0"
+done >> /etc/sysctl.conf
 
 # Não responder a pings direcionados ao endereço de broadcast
 # ※ Medida contra ataques de Smurf
