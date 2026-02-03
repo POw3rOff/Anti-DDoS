@@ -144,3 +144,49 @@ Gera uma linha do tempo unificada de eventos do sistema e modificações de arqu
 ```bash
 python3 timeline_forense_automatica.py --days 7 --output caso_investigacao.csv
 ```
+
+### 9. Runtime Container Guard (`runtime_container_guard.py`)
+
+Monitora o daemon Docker em tempo real para detectar comportamentos inseguros.
+
+**Funcionalidades:**
+- Alerta sobre criação de containers `--privileged`.
+- Detecta montagens de diretórios sensíveis (/proc, /sys).
+- Alerta sobre `docker exec` (execução de shell em container).
+
+**Como usar:**
+```bash
+python3 runtime_container_guard.py
+```
+
+### 10. Scanner de Segredos Cloud (`scanner_segredos_cloud.py`)
+
+Varre código e variáveis de ambiente em busca de chaves de API e senhas.
+
+**Funcionalidades:**
+- Patterns para AWS, Google, GitHub, Private Keys.
+- Scan recursivo de diretórios e scan de `os.environ`.
+- Ofuscação de segredos encontrados no output.
+
+**Como usar:**
+```bash
+python3 scanner_segredos_cloud.py --path /var/www/html --scan-env
+```
+
+### 11. Orquestrador de Resposta a Incidentes (`orquestrador_resposta_incidente.py`)
+
+Motor de automação para contenção e coleta de evidências.
+
+**Funcionalidades:**
+- `block_ip`: Bloqueia IP via iptables.
+- `isolate_host`: Isola a máquina (modo pânico), mantendo apenas IP de gestão.
+- `snapshot`: Coleta logs, lista de processos e conexões para análise forense.
+
+**Como usar:**
+```bash
+# Bloquear atacante
+sudo python3 orquestrador_resposta_incidente.py --action block_ip --target 192.168.1.50
+
+# Isolar máquina
+sudo python3 orquestrador_resposta_incidente.py --action isolate_host --mgmt-ip 10.0.0.10
+```
