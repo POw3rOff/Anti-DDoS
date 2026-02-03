@@ -1,4 +1,4 @@
-Estes scripts implementam um firewall usando o iptables para proteger o servidor associado Cyber Gamers. Foi desenvolvido pelo poweroff e testado contra ataques DDoS pela comunidade. Mais informações sobre o projeto podem ser encontradas em https://cyber-gamers.org/
+Estes scripts implementam um firewall robusto usando iptables para proteger a infraestrutura da Cyber-Gamers. O projeto foi desenvolvido por p0w3r0ff e exaustivamente testado contra ataques DDoS pela comunidade. Mais informações sobre o projeto podem ser encontradas em https://cyber-gamers.org/
 
 ---
 
