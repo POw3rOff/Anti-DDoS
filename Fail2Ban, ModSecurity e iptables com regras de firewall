@@ -1,5 +1,5 @@
 #!/bin/bash
-iptables com regras de firewall
+# iptables com regras de firewall
 ############ EXTRA STUFF TO HELP HIGH TRAFFIC (DDOS) ##################
 
 ###################################################################################################################
