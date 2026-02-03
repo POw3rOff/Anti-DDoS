@@ -98,3 +98,49 @@ python3 firewall_dinamica_autonomo.py --max-conns 50
 # Modo ativo (Aplica bloqueios - Requer Root)
 sudo python3 firewall_dinamica_autonomo.py --max-conns 50 --apply
 ```
+
+### 6. Forense de Memória Live (`forense_memoria_live.py`)
+
+Realiza análise forense em memória sem desligar o sistema, focando em processos suspeitos.
+
+**Funcionalidades:**
+- Detecta binários deletados ainda em execução.
+- Detecta regiões de memória RWX (Read-Write-Execute), indicativo de shellcode/injectors.
+- Lista sockets abertos por processo suspeito.
+
+**Como usar:**
+```bash
+sudo python3 forense_memoria_live.py --scan-level full
+```
+
+### 7. Auditoria de Integridade Total (`auditoria_integridade_total.py`)
+
+Monitoramento de integridade de arquivos (FIM) com base em hash SHA256.
+
+**Funcionalidades:**
+- Monitora /bin, /sbin, /usr/bin, /etc, /boot.
+- Detecta criação, remoção e modificação de conteúdo ou permissões.
+- Base de dados local (JSON).
+
+**Como usar:**
+```bash
+# Inicializar (Baseline)
+python3 auditoria_integridade_total.py --action init
+
+# Verificar alterações
+python3 auditoria_integridade_total.py --action check
+```
+
+### 8. Timeline Forense Automática (`timeline_forense_automatica.py`)
+
+Gera uma linha do tempo unificada de eventos do sistema e modificações de arquivos.
+
+**Funcionalidades:**
+- Parse de logs (Auth, Syslog, Kernel).
+- Coleta de metadados de arquivos (mtime/ctime).
+- Exportação para CSV ordenado cronologicamente.
+
+**Como usar:**
+```bash
+python3 timeline_forense_automatica.py --days 7 --output caso_investigacao.csv
+```
