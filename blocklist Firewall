@@ -72,11 +72,11 @@ check_and_create_directory "$blocklist_dir"
 
 # Itera sobre as URLs e baixa as listas
 for url in "${blocklist_urls[@]}"; do
-    curl -sS "$url" | grep -v ';' >> "$temp_file"
+    curl -sS "$url" >> "$temp_file"
 done
 
-# Remove duplicatas e ordena a lista
-sort -u "$temp_file" > "$blocklist_dir/blocklist_combined.txt"
+# Remove linhas com comentários ';', duplicatas e ordena a lista
+grep -v ';' "$temp_file" | sort -u > "$blocklist_dir/blocklist_combined.txt"
 
 # Limpa os arquivos temporários
 rm "$temp_file"
