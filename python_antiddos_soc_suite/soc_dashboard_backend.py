@@ -32,7 +32,8 @@ class SOCDashboardBackend:
 
     def start(self):
         handler = SOCDashboardHandler
-        self.server = socketserver.TCPServer(("", self.port), handler)
+        # Bind to localhost only for security
+        self.server = socketserver.TCPServer(("127.0.0.1", self.port), handler)
         print(f"SOC Dashboard Backend serving at port {self.port}")
         self.thread = threading.Thread(target=self.server.serve_forever)
         self.thread.daemon = True
