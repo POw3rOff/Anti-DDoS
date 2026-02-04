@@ -1,0 +1,19 @@
+mitigation:
+  # General settings
+  dry_run_default: true
+  auto_escalate: true
+
+  # State Machine
+  states:
+    normal: { risk_max: 29 }
+    defensive: { risk_min: 30, risk_max: 59 }
+    high_alert: { risk_min: 60 }
+
+  # Alerts
+  alerts:
+    enabled: true
+    log_file: "logs/mitigation_events.json.log"
+    webhook_url: "" # Placeholder
+
+  # Cooldown
+  cooldown_seconds: 300
