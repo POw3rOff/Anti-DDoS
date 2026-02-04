@@ -6,6 +6,19 @@ Esta suite de segurança evoluiu de um firewall robusto baseado em iptables para
 
 Este repositório evoluiu para uma suite completa de segurança, auditoria e hardening para sistemas Linux. Além do firewall original, ele agora inclui ferramentas para proteção de kernel, backups inteligentes, resposta a incidentes, detecção de intrusões e muito mais.
 
+## 🚀 Guia Rápido (Quick Start)
+
+Encontre rapidamente a ferramenta certa para sua necessidade:
+
+| Objetivo | Ferramenta Principal | Comando Sugerido |
+| :--- | :--- | :--- |
+| **Ativar Anti-DDoS** | Menu Interativo | `cd ddos_protection && ./Menu-2.sh` |
+| **Detectar Anomalias** | Análise de Logs (Python) | `cd python_security_suite && ./run_anomaly_detector.sh /var/log/syslog` |
+| **Auditar Kernel** | Verificação de Segurança | `cd kernel_os_security_suite && ./auditoria_kernel.sh` |
+| **Monitorar Rede** | Tráfego de Saída | `cd linux_security_scripts && ./outbound_monitor.sh` |
+| **Forense** | Snapshot em Incidente | `cd incident_response_suite && ./snapshot_em_incidente.sh` |
+| **Backup Seguro** | Backup Incremental | `cd smart_backup_suite && ./backup_incremental.sh /etc /backup/etc` |
+
 ## Estrutura do Projeto
 
 O projeto está organizado em suites modulares, cada uma focada em um aspecto crítico da segurança:
