@@ -28,12 +28,18 @@ PANIC_MODE_MULTIPLIER = 0.5      # Reduce limits by 50% in panic mode
 
 class TokenBucket:
     def __init__(self, capacity, fill_rate):
+        if capacity < 0:
+            raise ValueError(f"TokenBucket capacity must be non-negative, got {capacity}")
+        if fill_rate < 0:
+            raise ValueError(f"TokenBucket fill_rate must be non-negative, got {fill_rate}")
         self.capacity = float(capacity)
         self._tokens = float(capacity)
         self.fill_rate = float(fill_rate)
         self.last_update = time.time()
 
     def consume(self, tokens=1):
+        if tokens < 0:
+            raise ValueError(f"Cannot consume negative tokens: {tokens}")
         now = time.time()
         # Add new tokens based on time passed
         elapsed = now - self.last_update
