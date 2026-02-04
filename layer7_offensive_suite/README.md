@@ -29,3 +29,19 @@ Exemplo:
 ```bash
 python3 http_flood_simulator.py --help
 ```
+
+
+## Ferramentas Adicionais (Avançadas)
+
+6.  **bot_behavior_emulator.py**: Emula assinaturas de bots conhecidos (Googlebot, Bingbot) e padrões de timing humanos/robóticos.
+7.  **distributed_pattern_simulator.py**: Simula ataques distribuídos usando listas de proxies (se fornecidas) ou spoofing de headers (Client-IP, X-Forwarded-For).
+8.  **request_entropy_attack_simulator.py**: Gera requisições com alta entropia (URLs e Headers aleatórios) para tentar evadir regras de WAF baseadas em assinaturas estáticas.
+9.  **cache_bypass_simulator.py**: Utiliza técnicas de "Cache Busting" (parâmetros únicos, headers no-cache) para forçar o processamento no backend, ignorando caches intermediários (CDNs).
+10. **layer7_attack_orchestrator.py**: Script mestre para orquestrar múltiplos simuladores simultaneamente, criando cenários complexos (Ex: Stress, Evasion, Stealth).
+
+## Exemplo de Orquestração
+
+Para rodar um cenário de evasão combinado:
+```bash
+python3 layer7_attack_orchestrator.py http://alvo.com --scenario evasion --duration 120
+```
