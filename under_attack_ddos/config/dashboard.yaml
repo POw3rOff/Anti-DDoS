@@ -1,0 +1,19 @@
+dashboard:
+  # Refresh intervals (seconds)
+  refresh_rate: 1
+  log_poll_interval: 0.5
+
+  # Paths
+  state_file: "runtime/global_state.json"
+  log_file: "logs/system.json.log"
+
+  # UI Settings
+  theme: "dark"
+  max_log_lines: 100
+
+  # Layout Configuration
+  show_timeline: true
+  show_metrics: true
+
+  # Safety
+  allow_control: false # Set to true to enable mode switching buttons
