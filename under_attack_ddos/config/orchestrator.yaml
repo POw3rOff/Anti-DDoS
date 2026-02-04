@@ -1,0 +1,23 @@
+orchestrator:
+  # Sliding window settings
+  window_size_seconds: 30
+  cleanup_interval_seconds: 60
+
+  # Scoring Weights (0.0 - 1.0)
+  weights:
+    layer3: 0.4
+    layer4: 0.3
+    layer7: 0.3
+
+  # Multiplier for multi-layer attacks
+  cross_layer_multiplier: 1.5
+
+  # State Thresholds (Global Risk Score 0-100)
+  thresholds:
+    normal: { max: 29 }
+    monitor: { min: 30, max: 59 }
+    under_attack: { min: 60, max: 89 }
+    escalated: { min: 90 }
+
+  # Recovery
+  cooldown_seconds: 300
