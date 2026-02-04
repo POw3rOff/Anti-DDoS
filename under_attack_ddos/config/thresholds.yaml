@@ -1,0 +1,27 @@
+layer3:
+  # Network interface bandwidth limits
+  bandwidth_ingress_mbps:
+    warning: 500
+    critical: 850
+  # Packet rate limits
+  pps_ingress:
+    warning: 50000
+    critical: 100000
+  # Protocol specific
+  icmp_ratio_max: 0.10
+  fragment_rate_max: 100
+
+  # Source IP limits (PPS)
+  source_ip_pps:
+    normal: 100
+    under_attack: 50
+
+layer4:
+  syn_flood:
+    syn_rate_pps: 200
+  udp_flood:
+    pps_max: 20000
+
+layer7:
+  requests_per_minute:
+    global_baseline: 5000
