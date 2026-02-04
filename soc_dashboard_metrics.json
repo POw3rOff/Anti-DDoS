@@ -1,0 +1,12 @@
+{
+  "generated_at": 1770215961.1312144,
+  "system_health": "Operational",
+  "active_incidents": 0,
+  "mitigated_attacks": 0,
+  "top_attackers": [],
+  "throughput": {
+    "l3_packets": 14227,
+    "l4_conn": 0,
+    "l7_reqs": 3
+  }
+}
