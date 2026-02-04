@@ -2,7 +2,6 @@ import logging
 
 class AlertingNotificationEngine:
     def __init__(self):
-        logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
         self.logger = logging.getLogger("AlertEngine")
 
     def send_alert(self, level, title, message, channels=['log']):
@@ -34,5 +33,6 @@ class AlertingNotificationEngine:
         pass
 
 if __name__ == "__main__":
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
     alerter = AlertingNotificationEngine()
     alerter.send_alert("CRITICAL", "DDoS Attack Detected", "Traffic spike on /api/login", channels=['log', 'slack'])

@@ -5,7 +5,6 @@ class MitigationExecutor:
     def __init__(self, dry_run=True):
         self.dry_run = dry_run
         self.active_blocks = set()
-        logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger("MitigationExecutor")
 
     def execute_action(self, action, ip, reason):
@@ -42,5 +41,6 @@ class MitigationExecutor:
         self.logger.info(f"[CHALLENGE] Enabling Captcha/JS Challenge for {ip}: {reason}")
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     executor = MitigationExecutor(dry_run=True)
     executor.execute_action('BLOCK', '1.2.3.4', 'High Risk Score')
