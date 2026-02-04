@@ -1,0 +1,16 @@
+# Metin2 Game Protocol Defense Configuration
+
+# Login Thresholds
+max_login_pps: 5                # Max login attempts per second per source IP
+max_concurrent_sessions: 3      # Max active sessions per IP (anti-multibox)
+
+# Session Baseline
+min_session_duration: 60        # Seconds (sessions shorter than this are suspicious)
+handshake_timeout: 5.0          # Seconds allowed to complete AUTH_LOGIN sequence
+
+# Protocol Validation
+strict_handshake: true          # Enforce strict packet sequence (Header -> Key -> Auth)
+max_packet_size: 1400           # Max allowed packet size (prevent buffer overflows)
+allowed_proto_versions:         # Whitelist of allowed client versions
+  - "1923"
+  - "2024"
