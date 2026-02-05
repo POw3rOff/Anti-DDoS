@@ -88,7 +88,33 @@ class ConfigLoader:
             except Exception as e:
                 logging.error(f"Failed to parse config {path}: {e}")
                 sys.exit(2)
+
+        ConfigLoader._validate_config(config)
         return config
+
+    @staticmethod
+    def _validate_config(config):
+        """Enforces critical business rules on the loaded configuration."""
+        try:
+            # 1. Orchestrator Window & Intervals
+            orc = config.get("orchestrator", {})
+            if orc.get("window_size_seconds", 30) <= 0:
+                raise ValueError("orchestrator.window_size_seconds must be > 0")
+
+            # 2. Weights
+            weights = orc.get("weights", {})
+            for k, v in weights.items():
+                if v < 0:
+                    raise ValueError(f"orchestrator.weights.{k} must be >= 0")
+
+            # 3. Input Protection
+            inp = config.get("input_protection", {})
+            if inp.get("max_events_per_second", 1000) <= 0:
+                raise ValueError("input_protection.max_events_per_second must be > 0")
+
+        except ValueError as e:
+            logging.error(f"Configuration Validation Error: {e}")
+            sys.exit(3)
 
 class RateLimiter:
     """Token bucket rate limiter."""
