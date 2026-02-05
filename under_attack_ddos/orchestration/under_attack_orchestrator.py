@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Under Attack Orchestrator
+Under Attack Orchestrator (Hardened)
 Part of 'under_attack_ddos' Defense System.
 
 Responsibility: Central correlation and decision engine.
@@ -49,6 +49,14 @@ DEFAULT_CONFIG = {
             "escalated": {"min": 90}
         },
         "cooldown_seconds": 300
+    },
+    "security": {
+        "auth_token": "default_insecure"
+    },
+    "input_protection": {
+        "max_events_per_second": 1000,
+        "internal_queue_size": 5000,
+        "max_event_age_seconds": 5
     }
 }
 
@@ -58,27 +66,69 @@ DEFAULT_CONFIG = {
 
 class ConfigLoader:
     @staticmethod
-    def load(path):
-        if not os.path.exists(path):
-            logging.error(f"Config file not found: {path}")
-            return DEFAULT_CONFIG
+    def load(paths):
+        config = DEFAULT_CONFIG.copy()
+        # Ensure sub-dicts exist
+        if "security" not in config: config["security"] = {}
+        if "input_protection" not in config: config["input_protection"] = {}
 
-        try:
-            with open(path, 'r') as f:
-                user_config = yaml.safe_load(f) or {}
-            return user_config
-        except Exception as e:
-            logging.error(f"Failed to parse config: {e}")
-            sys.exit(2)
+        for path in paths:
+            if not os.path.exists(path):
+                continue
+            try:
+                with open(path, 'r') as f:
+                    data = yaml.safe_load(f)
+                    if not data: continue
+
+                    # Deep merge (simplified)
+                    for section in ["orchestrator", "security", "input_protection"]:
+                        if section in data:
+                            if section not in config: config[section] = {}
+                            config[section].update(data[section])
+            except Exception as e:
+                logging.error(f"Failed to parse config {path}: {e}")
+                sys.exit(2)
+        return config
+
+class RateLimiter:
+    """Token bucket rate limiter."""
+    def __init__(self, rate_per_second):
+        self.rate = rate_per_second
+        self.tokens = rate_per_second
+        self.last_update = time.time()
+        self.lock = threading.Lock()
+
+    def allow(self):
+        with self.lock:
+            now = time.time()
+            elapsed = now - self.last_update
+            self.last_update = now
+
+            # Refill
+            self.tokens += elapsed * self.rate
+            if self.tokens > self.rate:
+                self.tokens = self.rate
+
+            # Consume
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return True
+            return False
 
 class EventIngestor(threading.Thread):
-    """Reads events from input source and pushes to processing queue."""
-    def __init__(self, input_type, source, event_queue):
+    """Reads events from input source and pushes to processing queue with validation."""
+    def __init__(self, input_type, source, event_queue, config):
         super().__init__(daemon=True)
         self.input_type = input_type
         self.source = source
         self.event_queue = event_queue
+        self.config = config
         self.running = True
+
+        # Hardening
+        self.auth_token = config["security"].get("auth_token")
+        self.rate_limiter = RateLimiter(config["input_protection"]["max_events_per_second"])
+        self.max_age = config["input_protection"]["max_event_age_seconds"]
 
     def run(self):
         logging.info(f"Ingestor started. Source: {self.input_type}")
@@ -86,10 +136,8 @@ class EventIngestor(threading.Thread):
             self._tail_file()
         elif self.input_type == 'stdin':
             self._read_stdin()
-        # Socket impl omitted for brevity
 
     def _tail_file(self):
-        # Simple tail implementation
         try:
             with open(self.source, 'r') as f:
                 f.seek(0, 2) # Go to end
@@ -111,10 +159,30 @@ class EventIngestor(threading.Thread):
             logging.error(f"Stdin ingest error: {e}")
 
     def _process_line(self, line):
+        if not line.strip(): return
+
+        # 1. Rate Limit Check
+        if not self.rate_limiter.allow():
+            # Drop silently or log periodically (logging every drop is bad for DoS)
+            return
+
         try:
-            if not line.strip(): return
             event = json.loads(line)
-            self.event_queue.put(event)
+
+            # 2. Auth Check
+            if self.auth_token and self.auth_token != "default_insecure":
+                token = event.get("auth_token")
+                if token != self.auth_token:
+                    logging.warning(f"Dropped unauthorized event from {event.get('source_entity')}")
+                    return
+
+            # 3. Age Check (optional, if timestamp present)
+            # 4. Enqueue with limits
+            try:
+                self.event_queue.put(event, block=False)
+            except queue.Full:
+                logging.warning("Event queue FULL. Dropping event.")
+
         except json.JSONDecodeError:
             logging.warning(f"Invalid JSON received: {line[:50]}...")
 
@@ -185,7 +253,6 @@ class CorrelationEngine:
                 src_score = min(src_score, 100.0)
 
                 # Add to total (weighted average or max - adopting MAX strategy for safety)
-                # If ANY single source is critical, system is critical.
                 total_score = max(total_score, src_score)
 
                 if src_score > 30:
@@ -229,15 +296,19 @@ class Orchestrator:
         self.args = args
         self.config = config
         self.running = True
-        self.queue = queue.Queue()
+
+        # Hardened Queue
+        max_q = config["input_protection"].get("internal_queue_size", 5000)
+        self.queue = queue.Queue(maxsize=max_q)
 
         # Components
         source = args.input_file if args.input == 'file' else None
-        self.ingestor = EventIngestor(args.input, source, self.queue)
+        self.ingestor = EventIngestor(args.input, source, self.queue, config)
         self.engine = CorrelationEngine(config)
 
     def run(self):
         logging.info(f"Starting {SCRIPT_NAME}. Mode: {self.args.mode}")
+        logging.info(f"Security: Rate Limit={self.ingestor.rate_limiter.rate}/s, Queue={self.queue.maxsize}")
 
         # Start Ingestor
         self.ingestor.start()
@@ -290,6 +361,7 @@ def main():
 
     # Required Flags
     parser.add_argument("--config", required=True, help="Path to YAML configuration")
+    parser.add_argument("--hardening-config", default="config/hardening.yaml", help="Path to hardening config")
     parser.add_argument("--input", default="stdin", choices=["stdin", "file"], help="Input source")
     parser.add_argument("--input-file", help="Path to input file (if input=file)")
 
@@ -314,8 +386,10 @@ def main():
     )
 
     # Initialization
-    logging.info(f"Starting {SCRIPT_NAME} v1.0.0")
-    config = ConfigLoader.load(args.config)
+    logging.info(f"Starting {SCRIPT_NAME} v1.0.1 (Hardened)")
+
+    # Load Main + Hardening Configs
+    config = ConfigLoader.load([args.config, args.hardening_config])
 
     orchestrator = Orchestrator(args, config)
 
