@@ -16,48 +16,39 @@ import argparse
 from datetime import datetime, timezone
 from collections import defaultdict
 
-# Add parent directory to path to allow importing baseline
+# Add layer_game directory to path to allow importing common and metin2 modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
+    from common.game_protocol_parser import GameProtocolParser
     from metin2.metin2_baseline import Metin2Baseline
     from scapy.all import sniff, IP, TCP, Raw
 except ImportError as e:
-    print(f"CRITICAL: Missing dependencies or baseline module: {e}", file=sys.stderr)
+    print(f"CRITICAL: Missing dependencies or modules: {e}", file=sys.stderr)
     sys.exit(1)
 
 # -----------------------------------------------------------------------------
 # Constants
 # -----------------------------------------------------------------------------
 SCRIPT_NAME = "metin2_login_monitor"
-LAYER = "game"
 GAME = "metin2"
-
-# Metin2 default auth port (can be overridden)
 DEFAULT_AUTH_PORT = 11002
 
 # -----------------------------------------------------------------------------
 # Monitor Class
 # -----------------------------------------------------------------------------
-class Metin2LoginMonitor:
+class Metin2LoginMonitor(GameProtocolParser):
     def __init__(self, config_path=None, interface=None, dry_run=False):
+        # Initialize base class (handles logging and config loading)
+        super().__init__(SCRIPT_NAME, GAME, config_path, dry_run)
+
         self.baseline = Metin2Baseline(config_path)
         self.interface = interface
-        self.dry_run = dry_run
+
         self.login_counts = defaultdict(int)
         self.global_login_count = 0
         self.start_time = time.time()
         self.window_size = 1.0  # Check every second
-
-        self._setup_logging()
-        logging.info(f"Initialized {SCRIPT_NAME}. Dry-run: {dry_run}")
-
-    def _setup_logging(self):
-        logging.basicConfig(
-            format='%(asctime)s [%(levelname)s] %(message)s',
-            level=logging.INFO,
-            stream=sys.stderr
-        )
 
     def packet_callback(self, packet):
         """
@@ -67,8 +58,6 @@ class Metin2LoginMonitor:
         if IP in packet and TCP in packet:
             # Check if packet is destined for Auth Port
             if packet[TCP].dport == DEFAULT_AUTH_PORT:
-                # Heuristic: Metin2 Login packets usually have specific length or headers
-                # For this monitor, we count connections/payloads to the auth port
                 if Raw in packet:
                     self.login_counts[packet[IP].src] += 1
                     self.global_login_count += 1
@@ -82,24 +71,27 @@ class Metin2LoginMonitor:
         # 1. Per-IP Analysis
         for ip, count in self.login_counts.items():
             pps = count / duration
-
-            # Use Baseline module to validate
             is_anomaly, details = self.baseline.validate_login_rate(pps)
 
             if is_anomaly:
-                self.emit_event(ip, "auth_flood", details)
+                # Construct data payload for event
+                data = {
+                    "pps_observed": round(details["value"], 2),
+                    "pps_threshold": details["threshold"],
+                    "status": "simulated" if self.dry_run else "active"
+                }
+                self.emit_event("auth_flood", ip, details["severity"], data)
 
         # 2. Global Distributed Flood Analysis
         global_pps = self.global_login_count / duration
-        # Get threshold from config or default to 200
         global_threshold = self.baseline.config.get("global_login_pps", 200)
 
         if global_pps > global_threshold:
-            self.emit_event("GLOBAL", "distributed_auth_flood", {
-                "value": global_pps,
+            self.emit_event("distributed_auth_flood", "GLOBAL", "CRITICAL", {
+                "value": round(global_pps, 2),
                 "threshold": global_threshold,
-                "severity": "CRITICAL",
-                "unique_ips": len(self.login_counts)
+                "unique_ips": len(self.login_counts),
+                "status": "simulated" if self.dry_run else "active"
             })
 
         # Reset for next window
@@ -107,44 +99,11 @@ class Metin2LoginMonitor:
         self.global_login_count = 0
         self.start_time = time.time()
 
-    def emit_event(self, src_ip, event_type, details):
-        """Emits a structured JSON event."""
-        # Handle 'details' structure variation
-        value = details.get("value", 0)
-        threshold = details.get("threshold", 0)
-        severity = details.get("severity", "MEDIUM")
-
-        event = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "layer": LAYER,
-            "game": GAME,
-            "event": event_type,
-            "src_ip": src_ip,
-            "severity": severity,
-            "data": {
-                "pps_observed": round(value, 2),
-                "pps_threshold": threshold,
-                "status": "simulated" if self.dry_run else "active"
-            }
-        }
-
-        if "unique_ips" in details:
-            event["data"]["unique_ips"] = details["unique_ips"]
-
-        # STDOUT for Orchestrator
-        print(json.dumps(event))
-        sys.stdout.flush()
-
-        # STDERR for operator logs
-        logging.warning(f"ALERT: {event_type} from {src_ip} ({value:.1f} PPS)")
-
     def run(self):
         """Main capture loop."""
         logging.info(f"Starting capture on port {DEFAULT_AUTH_PORT}...")
-
         try:
             while True:
-                # Capture for window_size seconds
                 sniff(
                     filter=f"tcp dst port {DEFAULT_AUTH_PORT}",
                     prn=self.packet_callback,
@@ -169,13 +128,19 @@ def main():
 
     args = parser.parse_args()
 
-    monitor = Metin2LoginMonitor(args.config, args.interface, args.dry_run)
+    # Pass config path to default if not provided, to ensure it loads from correct place
+    config_path = args.config
+    if not config_path:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(base_dir, "config.yaml")
+
+    monitor = Metin2LoginMonitor(config_path, args.interface, args.dry_run)
 
     if args.test_ip:
         # Simulation Mode
         logging.info(f"Simulating flood from {args.test_ip} with {args.test_pps} PPS")
         monitor.login_counts[args.test_ip] = int(args.test_pps)
-        monitor.global_login_count = int(args.test_pps) # Also increment global for test
+        monitor.global_login_count = int(args.test_pps)
         monitor.analyze_window()
     else:
         # Live Mode
