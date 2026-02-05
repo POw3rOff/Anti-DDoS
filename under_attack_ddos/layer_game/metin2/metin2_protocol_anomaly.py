@@ -60,18 +60,23 @@ class Metin2ProtocolAnomaly(GameProtocolParser):
         Callback for Scapy sniffer.
         Analyzes TCP payload to infer protocol state and detect violations.
         """
-        if IP in packet and TCP in packet and Raw in packet:
+        # Optimization: Use getlayer to avoid repeated traversal
+        ip_layer = packet.getlayer(IP)
+        tcp_layer = packet.getlayer(TCP)
+        raw_layer = packet.getlayer(Raw)
+
+        if ip_layer and tcp_layer and raw_layer:
             # Check destination port (Client -> Server)
-            if packet[TCP].dport == DEFAULT_AUTH_PORT:
-                self._analyze_client_packet(packet)
+            if tcp_layer.dport == DEFAULT_AUTH_PORT:
+                self._analyze_client_packet(ip_layer, raw_layer)
 
         # Periodic cleanup of stale states
         if time.time() - self.last_cleanup > self.cleanup_interval:
             self._cleanup_states()
 
-    def _analyze_client_packet(self, packet):
-        src_ip = packet[IP].src
-        payload = packet[Raw].load
+    def _analyze_client_packet(self, ip_layer, raw_layer):
+        src_ip = ip_layer.src
+        payload = raw_layer.load
 
         # Heuristic State Machine
         current_state = self.client_states[src_ip]["state"]
