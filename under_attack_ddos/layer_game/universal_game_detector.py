@@ -77,7 +77,9 @@ class TrafficAnalyzer:
         self.lock = threading.Lock()
 
         # Hardening
-        self.auth_token = config.get("security", {}).get("auth_token", "default_insecure")
+        self.auth_token = os.environ.get("UAD_AUTH_TOKEN")
+        if not self.auth_token:
+            self.auth_token = config.get("security", {}).get("auth_token", "default_insecure")
 
     def process_packet(self, pkt):
         if not self.running: return

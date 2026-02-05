@@ -76,6 +76,13 @@ class ConfigLoader:
                                 config["security"].update(data["security"])
                 except Exception as e:
                     logging.error(f"Config load error {path}: {e}")
+
+        # Override with Environment Variables
+        env_token = os.environ.get("UAD_AUTH_TOKEN")
+        if env_token:
+            if "security" not in config: config["security"] = {}
+            config["security"]["auth_token"] = env_token
+
         return config
 
 class SpoofAnalyzer:

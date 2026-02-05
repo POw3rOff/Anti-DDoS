@@ -4,7 +4,8 @@
 security:
   # Shared secret for internal component authentication
   # All detectors must include this token in their JSON output: {"auth_token": "..."}
-  auth_token: "CHANGE_ME_IN_PRODUCTION_RANDOMLY_GENERATED_TOKEN_123"
+  # CRITICAL: Use UAD_AUTH_TOKEN environment variable in production!
+  auth_token: ""
 
   # Allow only specific users to run critical components (not fully enforced by script, but for reference)
   allowed_users: ["root", "netadmin"]
