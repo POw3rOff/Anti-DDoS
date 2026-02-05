@@ -1,0 +1,16 @@
+# Cross-Layer Correlation Rules
+
+# Time Windows
+micro_window_seconds: 10
+macro_window_seconds: 300
+
+# Scoring Weights
+weights:
+  layer3: 0.8
+  layer4: 0.6
+  layer7: 0.5
+  layer_game: 0.9
+
+# Thresholds
+multi_vector_score_threshold: 15
+subnet_aggregation_threshold: 50
