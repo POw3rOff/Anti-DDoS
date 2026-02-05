@@ -7,7 +7,13 @@
 #include "../common/maps.h"
 #include "../common/events.h"
 
-#define SYN_PPS_THRESHOLD 500
+#define DEFAULT_SYN_THRESHOLD 500
+
+static __always_inline __u32 get_threshold(__u32 idx, __u32 default_val) {
+    __u32 *val = bpf_map_lookup_elem(&config_map, &idx);
+    if (val && *val > 0) return *val;
+    return default_val;
+}
 
 SEC("xdp")
 int xdp_syn_guard(struct xdp_md *ctx) {
@@ -16,7 +22,6 @@ int xdp_syn_guard(struct xdp_md *ctx) {
 
     struct ethhdr *eth = data;
     if ((void *)(eth + 1) > data_end) return XDP_PASS;
-
     if (eth->h_proto != bpf_htons(ETH_P_IP)) return XDP_PASS;
 
     struct iphdr *iph = (void *)(eth + 1);
@@ -26,7 +31,6 @@ int xdp_syn_guard(struct xdp_md *ctx) {
         struct tcphdr *tcp = (void *)(iph + 1);
         if ((void *)(tcp + 1) > data_end) return XDP_PASS;
 
-        // Check for SYN flag (and no ACK)
         if (tcp->syn && !tcp->ack) {
             __u32 src_ip = iph->saddr;
             __u64 *count = bpf_map_lookup_elem(&tcp_syn_counters, &src_ip);
@@ -34,7 +38,9 @@ int xdp_syn_guard(struct xdp_md *ctx) {
             if (count) {
                 __sync_fetch_and_add(count, 1);
 
-                if (*count > SYN_PPS_THRESHOLD && (*count % 50 == 0)) {
+                __u32 limit = get_threshold(CONFIG_IDX_SYN, DEFAULT_SYN_THRESHOLD);
+
+                if (*count > limit && (*count % 50 == 0)) {
                     struct detection_event_t *e;
                     e = bpf_ringbuf_reserve(&event_ringbuf, sizeof(*e), 0);
                     if (e) {
