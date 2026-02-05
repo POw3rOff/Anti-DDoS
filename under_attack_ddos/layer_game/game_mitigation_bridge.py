@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 # Constants & Config
 # -----------------------------------------------------------------------------
 SCRIPT_NAME = "game_mitigation_bridge"
-LAYER = "game_mitigation"
+LAYER = "layer_game"  # Standardized for global orchestrator
 
 # Mitigation Policy Definitions
 POLICIES = {
@@ -95,17 +95,17 @@ class MitigationBridge:
         # 3. Construct Intent Object
         intent = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "source_layer": "game",
-            "game": game,
-            "src_ip": src_ip,
-            "intent": action,
-            "confidence": confidence,
+            "layer": LAYER,
+            "event": f"game_mitigation_intent",
+            "source_entity": src_ip,
             "severity": severity,
-            "ttl": ttl,
             "data": {
+                "game": game,
+                "protocol": "unknown", # Correlated events might aggregate protocols
+                "action_type": action,
+                "ttl": ttl,
                 "original_signals": event.get("signals", []),
-                "policy_used": self.policy_name,
-                "status": "simulated" if self.dry_run else "active"
+                "policy_used": self.policy_name
             }
         }
 
@@ -116,7 +116,7 @@ class MitigationBridge:
         print(json.dumps(intent))
         sys.stdout.flush()
 
-        logging.warning(f"MITIGATION INTENT: {intent['intent']} for {intent['src_ip']} (TTL: {intent['ttl']}s)")
+        logging.warning(f"MITIGATION INTENT: {intent['data']['action_type']} for {intent['source_entity']} (TTL: {intent['data']['ttl']}s)")
 
     def run_stdin(self):
         logging.info("Listening on STDIN...")
