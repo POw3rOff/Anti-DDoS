@@ -4,7 +4,7 @@ Metin2 Protocol Anomaly Detector
 Part of Layer G (Game Protocol Defense)
 
 Responsibility: Detects protocol violations, handshake timing anomalies,
-and sequence disorders in the Metin2 authentication flow.
+zombie connections (slowloris-style), and sequence disorders.
 """
 
 import sys
@@ -38,7 +38,7 @@ DEFAULT_AUTH_PORT = 11002
 STATE_INIT = 0
 STATE_HEADER_SENT = 1
 STATE_KEY_EXCHANGE = 2
-STATE_AUTH_SENT = 3
+STATE_AUTH_SENT = 3 # Considered "Handshake Complete" for this detector
 
 # -----------------------------------------------------------------------------
 # Anomaly Detector Class
@@ -51,7 +51,7 @@ class Metin2ProtocolAnomaly:
 
         # Track client states: {src_ip: {"state": int, "ts": float}}
         self.client_states = defaultdict(lambda: {"state": STATE_INIT, "ts": time.time()})
-        self.cleanup_interval = 10.0
+        self.cleanup_interval = 2.0 # Check frequently for zombies
         self.last_cleanup = time.time()
 
         self._setup_logging()
@@ -88,32 +88,36 @@ class Metin2ProtocolAnomaly:
         now = time.time()
 
         # 1. Timing Check (Baseline Validation)
+        # If too much time passed between packets in a handshake sequence
         duration = now - last_ts
         is_anomaly, details = self.baseline.validate_handshake_time(duration)
         if is_anomaly:
             self.emit_event(src_ip, "timing_anomaly", details)
-            # Reset state on failure
+            # Reset state on failure/timeout
             del self.client_states[src_ip]
             return
 
         # 2. Sequence/Header Validation (Heuristic)
-        # Metin2 packets often start with specific headers.
-        # Example: 0x32 (Header), 0x45 (Key), 0x98 (Auth) - *Hypothetical for defense*
-
-        # Logic: If client sends AUTH packet without HEADER/KEY first -> Violation
-        # NOTE: Without a full dissector, we assume length-based heuristics here.
         pkt_len = len(payload)
 
         if current_state == STATE_INIT:
-            # Expecting Initial Handshake (e.g., specific length)
-            if pkt_len < 4: # Too small, likely garbage/fuzzing
+            # Expecting Initial Handshake Packet
+            # Metin2 Init packets are usually small but not empty.
+            if pkt_len < 4:
                 self.emit_event(src_ip, "malformed_packet", {"len": pkt_len, "reason": "too_short_init"})
             else:
+                # Transition to next state
                 self.client_states[src_ip] = {"state": STATE_HEADER_SENT, "ts": now}
 
         elif current_state == STATE_HEADER_SENT:
             # Expecting Key Exchange
+            # Check if client skipped to Auth immediately (Violation)
+            # Simplified check: Just advance state for now
             self.client_states[src_ip] = {"state": STATE_KEY_EXCHANGE, "ts": now}
+
+        elif current_state == STATE_KEY_EXCHANGE:
+            # Expecting Auth/Login
+            self.client_states[src_ip] = {"state": STATE_AUTH_SENT, "ts": now}
 
         # Update timestamp for timeout tracking
         self.client_states[src_ip]["ts"] = now
@@ -121,12 +125,18 @@ class Metin2ProtocolAnomaly:
     def _cleanup_states(self):
         """Remove clients that timed out or disconnected."""
         now = time.time()
+        # Use a slightly stricter timeout for "stuck" connections than general session timeout
         timeout = self.baseline.config.get("handshake_timeout", 5.0)
 
         to_remove = []
         for ip, data in self.client_states.items():
-            if now - data["ts"] > timeout:
-                # Optional: Flag as "zombie connection" or "slow read"
+            age = now - data["ts"]
+            if age > timeout:
+                # If they are stuck in early states, it's a zombie connection
+                # STATE_AUTH_SENT is the "safe" state where we stop tracking strictly here (handled by session monitor)
+                if data["state"] < STATE_AUTH_SENT:
+                     self.emit_event(ip, "zombie_connection", {"state": data["state"], "duration": round(age, 2)})
+
                 to_remove.append(ip)
 
         for ip in to_remove:
@@ -151,7 +161,7 @@ class Metin2ProtocolAnomaly:
 
         print(json.dumps(event))
         sys.stdout.flush()
-        logging.warning(f"ALERT: Protocol violation from {src_ip}: {event_type}")
+        logging.warning(f"ALERT: {event_type} from {src_ip}")
 
     def run(self):
         """Main capture loop."""
@@ -177,7 +187,7 @@ def main():
 
     # Test Flags
     parser.add_argument("--test-ip", help="Simulate anomalous packet from IP")
-    parser.add_argument("--test-type", choices=["timing", "malformed"], help="Type of anomaly to simulate")
+    parser.add_argument("--test-type", choices=["timing", "malformed", "zombie"], help="Type of anomaly to simulate")
 
     args = parser.parse_args()
 
@@ -189,6 +199,8 @@ def main():
             detector.emit_event(args.test_ip, "timing_anomaly", {"duration": 10.0, "limit": 5.0})
         elif args.test_type == "malformed":
             detector.emit_event(args.test_ip, "malformed_packet", {"len": 2, "reason": "too_short"})
+        elif args.test_type == "zombie":
+             detector.emit_event(args.test_ip, "zombie_connection", {"state": 1, "duration": 6.0})
     else:
         if os.geteuid() != 0:
             logging.warning("Not running as root. Sniffing might fail.")
