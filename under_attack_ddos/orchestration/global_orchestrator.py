@@ -1,191 +1,142 @@
 #!/usr/bin/env python3
 """
 Global Orchestrator
-Part of Anti-DDoS/under_attack_ddos/
+Part of 'under_attack_ddos' Defense System.
 
-Responsibility: The Central Brain. Consumes mitigation intents from ALL layers
-(L3, L4, L7, G), correlates them, and decides authoritative enforcement actions.
+Responsibility: Central authority for mitigation decisions.
+Receives intent from 'under_attack_orchestrator', 'distributed_sync_agent',
+and other detectors to issue concrete enforcement commands.
 """
 
 import sys
 import os
-import json
 import time
-import argparse
+import json
 import logging
+import argparse
+import signal
+import queue
 import threading
-from collections import defaultdict, deque
 from datetime import datetime, timezone
 
-# -----------------------------------------------------------------------------
-# Constants & Config
-# -----------------------------------------------------------------------------
+# Third-party imports
+try:
+    import yaml
+except ImportError as e:
+    print(f"CRITICAL: Missing dependencies: {e}", file=sys.stderr)
+    sys.exit(4)
+
 SCRIPT_NAME = "global_orchestrator"
-LAYER = "control_plane"
 
-# Decision Matrices
-# Maps (Aggregate Severity, Confidence) -> Enforcement Level
-DECISION_MATRIX = {
-    "LOW": "OBSERVE",
-    "MEDIUM": "SOFT",
-    "HIGH": "HARD",
-    "CRITICAL": "ISOLATE"
-}
-
-# Action Mapping
-ACTIONS = {
-    "OBSERVE": "log_only",
-    "SOFT": "rate_limit",
-    "HARD": "block_temp",
-    "ISOLATE": "blackhole_routing"
-}
-
-# -----------------------------------------------------------------------------
-# Orchestrator Class
-# -----------------------------------------------------------------------------
 class GlobalOrchestrator:
-    def __init__(self, mode="observe", policy="balanced", dry_run=False):
-        self.mode = mode
-        self.policy = policy
+    def __init__(self, config_path, dry_run=False):
+        self.config_path = config_path
         self.dry_run = dry_run
+        self.running = True
+        self.queue = queue.Queue()
 
-        # State: {src_ip: {"score": float, "layers": set(), "intents": []}}
-        self.ip_state = defaultdict(lambda: {"score": 0.0, "layers": set(), "intents": []})
-        self.cleanup_interval = 60
-        self.last_cleanup = time.time()
+        # Load policies
+        self.policies = self._load_config()
 
-        self._setup_logging()
-        self._ensure_dirs()
-        logging.info(f"Initialized {SCRIPT_NAME}. Mode: {mode}. Policy: {policy}. Dry-run: {dry_run}")
+    def _load_config(self):
+        # Simplified policy loader
+        if os.path.exists(self.config_path):
+            with open(self.config_path, 'r') as f:
+                return yaml.safe_load(f) or {}
+        return {}
 
-    def _setup_logging(self):
-        logging.basicConfig(
-            format='%(asctime)s [%(levelname)s] %(message)s',
-            level=logging.INFO,
-            stream=sys.stderr
-        )
+    def ingest_loop(self):
+        """Read JSON events from STDIN (piped from detectors/orchestrators)."""
+        while self.running:
+            try:
+                line = sys.stdin.readline()
+                if not line: break
 
-    def _ensure_dirs(self):
-        os.makedirs("runtime/enforcement", exist_ok=True)
+                event = json.loads(line)
+                self.queue.put(event)
+            except json.JSONDecodeError:
+                continue
+            except Exception:
+                break
 
-    def ingest_intent(self, line):
-        """Parse normalized intent JSON."""
-        try:
-            if not line.strip(): return
-            intent = json.loads(line)
+    def process_loop(self):
+        """Process events and dispatch commands."""
+        while self.running:
+            try:
+                event = self.queue.get(timeout=1.0)
+                self._handle_event(event)
+            except queue.Empty:
+                continue
 
-            src_ip = intent.get("src_ip")
-            if not src_ip: return
+    def _handle_event(self, event):
+        # Dispatch logic
+        layer = event.get("layer")
+        evt_type = event.get("event")
+        src = event.get("source_entity")
+        data = event.get("data", {})
 
-            self._update_state(src_ip, intent)
-            self._evaluate_enforcement(src_ip)
+        # Distributed / Game Layer Handling
+        if layer == "distributed":
+            if evt_type == "edge_mitigation_triggered":
+                self._dispatch_mitigation("iptables_block", src, {"duration": 300, "reason": "edge_sync"})
+                return
 
-        except json.JSONDecodeError:
-            pass
+        if layer == "layer_game":
+            severity = event.get("severity")
+            if severity in ["HIGH", "CRITICAL"]:
+                # Game specific mitigation
+                game = data.get("game")
+                proto = data.get("protocol")
+                self._dispatch_mitigation("game_port_block", src, {"game": game, "protocol": proto, "duration": 60})
+                return
 
-    def _update_state(self, src_ip, intent):
-        state = self.ip_state[src_ip]
+        # Legacy/Standard Handling
+        if event.get("state") == "UNDER_ATTACK":
+            # Global mode change
+            logging.warning("SYSTEM UNDER ATTACK - Escalating defenses")
+            # In real impl, this would trigger mode switching scripts
+            return
 
-        # Add intent
-        state["intents"].append(intent)
-        state["layers"].add(intent.get("source_layer", "unknown"))
-
-        # Recalculate Score
-        # Simple additive model + Multiplier for multi-layer
-        severity_score = {
-            "LOW": 10, "MEDIUM": 30, "HIGH": 60, "CRITICAL": 90
-        }.get(intent.get("severity", "LOW"), 10)
-
-        confidence = intent.get("confidence", 0.5)
-
-        impact = severity_score * confidence
-
-        # Multi-layer multiplier
-        if len(state["layers"]) > 1:
-            impact *= 1.5
-
-        state["score"] += impact
-        # Cap score
-        state["score"] = min(state["score"], 150.0)
-
-    def _evaluate_enforcement(self, src_ip):
-        state = self.ip_state[src_ip]
-        score = state["score"]
-
-        # Determine Severity Level based on Score
-        level = "LOW"
-        if score > 120: level = "CRITICAL"
-        elif score > 80: level = "HIGH"
-        elif score > 40: level = "MEDIUM"
-
-        decision = DECISION_MATRIX.get(level, "OBSERVE")
-        action = ACTIONS.get(decision, "log_only")
-
-        # Policy Adjustments
-        if self.policy == "strict" and level == "MEDIUM":
-            action = "block_temp" # Escalate
-        elif self.policy == "permissive" and level == "HIGH":
-            action = "rate_limit" # De-escalate
-
-        # Emit Command
-        if decision != "OBSERVE":
-            self._emit_enforcement(src_ip, action, level, state["layers"])
-
-    def _emit_enforcement(self, src_ip, action, level, layers):
+    def _dispatch_mitigation(self, action_type, target, params):
         command = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "action": action,
-            "src_ip": src_ip,
-            "ttl": 300 if level == "MEDIUM" else 900,
-            "reason": f"score_exceeded_{level.lower()}",
-            "confidence": 0.9, # Simplified
-            "layers": list(layers),
-            "data": {
-                "status": "simulated" if self.dry_run or self.mode == "observe" else "active"
-            }
+            "action": action_type,
+            "target": target,
+            "params": params
         }
 
-        # Write to file for Enforcement Agents to pick up
-        fname = f"runtime/enforcement/{src_ip}_{int(time.time())}.json"
-        try:
-            with open(fname, 'w') as f:
-                json.dump(command, f)
-        except Exception as e:
-            logging.error(f"Failed to write enforcement: {e}")
+        json_cmd = json.dumps(command)
+        if self.dry_run:
+            logging.info(f"[DRY-RUN] Dispatch: {json_cmd}")
+        else:
+            # Write to enforcement queue file or similar.
+            # For this prototype, we log to stdout which might be picked up by a dispatcher
+            # But usually Orchestrator -> Dispatcher via IPC.
+            logging.info(f"DISPATCH >>> {json_cmd}")
+            # Ensure separate output stream if needed, usually orchestrator writes to a specific pipe
+            # Here we just log.
 
-        logging.warning(f"DECISION: {action} for {src_ip} (Layers: {list(layers)})")
+    def stop(self, *args):
+        self.running = False
+        sys.exit(0)
 
-    def run_stdin(self):
-        logging.info("Listening on STDIN...")
-        try:
-            for line in sys.stdin:
-                self.ingest_intent(line)
-        except KeyboardInterrupt:
-            logging.info("Stopping...")
-
-# -----------------------------------------------------------------------------
-# CLI Entry Point
-# -----------------------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser(description="Global Security Orchestrator")
-    parser.add_argument("--input", choices=["stdin", "files"], default="stdin", help="Input mode")
-    parser.add_argument("--mode", choices=["observe", "active"], default="observe", help="Operational mode")
-    parser.add_argument("--policy", choices=["strict", "balanced", "permissive"], default="balanced", help="Enforcement policy")
-    parser.add_argument("--dry-run", action="store_true", help="Simulate enforcement")
-    parser.add_argument("--verbose", action="store_true", help="Debug logging")
+    parser = argparse.ArgumentParser(description=SCRIPT_NAME)
+    parser.add_argument("--config", default="config/orchestrator.yaml")
+    parser.add_argument("--dry-run", action="store_true")
 
     args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s', stream=sys.stderr)
 
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
+    orch = GlobalOrchestrator(args.config, args.dry_run)
+    signal.signal(signal.SIGINT, orch.stop)
+    signal.signal(signal.SIGTERM, orch.stop)
 
-    orch = GlobalOrchestrator(args.mode, args.policy, args.dry_run)
+    # Input thread
+    t = threading.Thread(target=orch.ingest_loop, daemon=True)
+    t.start()
 
-    if args.input == "stdin":
-        orch.run_stdin()
-    else:
-        logging.error("File input mode not implemented yet.")
-        sys.exit(1)
+    orch.process_loop()
 
 if __name__ == "__main__":
     main()
