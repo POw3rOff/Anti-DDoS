@@ -13,12 +13,15 @@ import json
 import time
 import logging
 import argparse
-import yaml
 import math
 from datetime import datetime, timezone
 from collections import defaultdict
 
+# Add layer_game directory to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 try:
+    from common.game_protocol_parser import GameProtocolParser
     from scapy.all import sniff, IP, TCP, Raw
 except ImportError as e:
     print(f"CRITICAL: Missing dependencies: {e}", file=sys.stderr)
@@ -28,19 +31,18 @@ except ImportError as e:
 # Constants
 # -----------------------------------------------------------------------------
 SCRIPT_NAME = "metin2_session_monitor"
-LAYER = "game"
 GAME = "metin2"
 DEFAULT_GAME_PORT = 13000
 
 # -----------------------------------------------------------------------------
 # Session Monitor Class
 # -----------------------------------------------------------------------------
-class Metin2SessionMonitor:
+class Metin2SessionMonitor(GameProtocolParser):
     def __init__(self, config_path=None, interface=None, port_range=None, dry_run=False):
-        self.config = self._load_config(config_path)
+        super().__init__(SCRIPT_NAME, GAME, config_path, dry_run)
+
         self.interface = interface
         self.port_range = port_range or f"{DEFAULT_GAME_PORT}"
-        self.dry_run = dry_run
 
         # State tracking
         self.sessions = defaultdict(lambda: {"pkt_count": 0, "last_ts": time.time(), "start_ts": time.time()})
@@ -48,33 +50,11 @@ class Metin2SessionMonitor:
         self.port_history = defaultdict(set)
 
         # Payload size tracking for variance calculation
-        # {src_ip: [len1, len2, ...]}
-        # We only keep a small sample to save memory
         self.payload_samples = defaultdict(list)
         self.max_samples = 50
 
         self.start_window = time.time()
         self.window_size = 1.0
-
-        self._setup_logging()
-        logging.info(f"Initialized {SCRIPT_NAME} monitoring ports {self.port_range}. Dry-run: {dry_run}")
-
-    def _setup_logging(self):
-        logging.basicConfig(
-            format='%(asctime)s [%(levelname)s] %(message)s',
-            level=logging.INFO,
-            stream=sys.stderr
-        )
-
-    def _load_config(self, path):
-        if not path:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            path = os.path.join(base_dir, "config.yaml")
-        try:
-            with open(path, 'r') as f:
-                return yaml.safe_load(f) or {}
-        except Exception:
-            return {}
 
     def packet_callback(self, packet):
         """Callback for captured packets."""
@@ -117,18 +97,15 @@ class Metin2SessionMonitor:
         duration = now - self.start_window
         if duration < 0.1: duration = 0.1
 
-        # Load Thresholds
+        # Load Thresholds from self.config (loaded by base class)
         max_pps = self.config.get("max_session_pps", 50)
         max_channel_switches = self.config.get("max_channel_switches", 5)
         idle_limit = self.config.get("idle_timeout", 300)
         grace_period = self.config.get("grace_period", 2.0)
-        min_variance = self.config.get("min_payload_variance", 0.0) # 0 means disabled/strict
+        min_variance = self.config.get("min_payload_variance", 0.0)
 
-        # Opcode Rules
         fallback_opcode_pps = self.config.get("max_opcode_pps", 20)
         opcode_rules = self.config.get("opcode_rules", {})
-        # Convert keys in config (int/str) to int if needed
-        # YAML keys like 0x12 might be loaded as ints automatically.
 
         ips_to_purge = []
 
@@ -144,15 +121,17 @@ class Metin2SessionMonitor:
             if session_age > grace_period:
                 pps = sess["pkt_count"] / duration
                 if pps > max_pps:
-                    self.emit_event(ip, "pps_exceeded", pps, max_pps, "HIGH")
+                    self.emit_event("session_abuse", ip, "HIGH", {
+                        "metric": "pps_exceeded",
+                        "value": round(pps, 2),
+                        "threshold": max_pps
+                    })
 
-                # 3. Opcode Flood Check (Granular)
+                # 3. Opcode Flood Check
                 if ip in self.opcode_counts:
                     for op, count in self.opcode_counts[ip].items():
                         op_pps = count / duration
 
-                        # Determine threshold
-                        # Try exact match or string representation
                         limit = opcode_rules.get(op)
                         if limit is None:
                             limit = opcode_rules.get(f"0x{op:02x}")
@@ -160,21 +139,29 @@ class Metin2SessionMonitor:
                             limit = fallback_opcode_pps
 
                         if op_pps > limit:
-                            self.emit_event(ip, "opcode_flood", op_pps, limit, "HIGH", {"opcode": f"0x{op:02x}"})
+                             self.emit_event("opcode_flood", ip, "HIGH", {
+                                "opcode": f"0x{op:02x}",
+                                "value": round(op_pps, 2),
+                                "threshold": limit
+                            })
 
                 # 4. Channel Switch Abuse
                 if ip in self.port_history:
                     unique_ports = len(self.port_history[ip])
                     if unique_ports > max_channel_switches:
-                         self.emit_event(ip, "channel_switch_abuse", unique_ports, max_channel_switches, "MEDIUM")
+                         self.emit_event("channel_switch_abuse", ip, "MEDIUM", {
+                             "value": unique_ports,
+                             "threshold": max_channel_switches
+                         })
 
                 # 5. Payload Variance (Bot Detection)
-                # Only check if enough samples and PPS is significant (avoid FPs on idle clients)
                 if len(self.payload_samples[ip]) > 10 and pps > 5:
                     std_dev = self.calculate_variance(self.payload_samples[ip])
-                    # If variance is too low (e.g. 0 or close to 0), it's a fixed-packet bot
                     if std_dev < min_variance:
-                        self.emit_event(ip, "bot_fixed_pattern", std_dev, min_variance, "MEDIUM")
+                        self.emit_event("bot_fixed_pattern", ip, "MEDIUM", {
+                            "value": round(std_dev, 3),
+                            "threshold": min_variance
+                        })
 
             # Reset counters
             sess["pkt_count"] = 0
@@ -190,29 +177,6 @@ class Metin2SessionMonitor:
             if ip in self.payload_samples: del self.payload_samples[ip]
 
         self.start_window = now
-
-    def emit_event(self, src_ip, event_type, value, threshold, severity, extra_data=None):
-        """Emits a structured JSON event."""
-        data = {
-            "value": round(value, 2),
-            "threshold": threshold,
-            "status": "simulated" if self.dry_run else "active"
-        }
-        if extra_data:
-            data.update(extra_data)
-
-        event = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "layer": LAYER,
-            "game": GAME,
-            "event": event_type,
-            "src_ip": src_ip,
-            "severity": severity,
-            "data": data
-        }
-        print(json.dumps(event))
-        sys.stdout.flush()
-        logging.warning(f"ALERT: {event_type} from {src_ip} (Val: {value:.1f})")
 
     def run(self):
         """Main capture loop."""
@@ -251,7 +215,13 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    monitor = Metin2SessionMonitor(args.config, args.interface, args.port_range, args.dry_run)
+    # Resolve default config path if not provided
+    config_path = args.config
+    if not config_path:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(base_dir, "config.yaml")
+
+    monitor = Metin2SessionMonitor(config_path, args.interface, args.port_range, args.dry_run)
 
     if os.geteuid() != 0:
         logging.warning("Not running as root. Sniffing might fail.")
