@@ -4,7 +4,7 @@ Metin2 Login Flood Monitor
 Part of Layer G (Game Protocol Defense)
 
 Responsibility: Detects excessive authentication attempts (login floods) by monitoring
-network traffic or logs and validating against the Metin2 behavioral baseline.
+network traffic or logs. Handles single-source floods and distributed (global) floods.
 """
 
 import sys
@@ -45,6 +45,7 @@ class Metin2LoginMonitor:
         self.interface = interface
         self.dry_run = dry_run
         self.login_counts = defaultdict(int)
+        self.global_login_count = 0
         self.start_time = time.time()
         self.window_size = 1.0  # Check every second
 
@@ -70,6 +71,7 @@ class Metin2LoginMonitor:
                 # For this monitor, we count connections/payloads to the auth port
                 if Raw in packet:
                     self.login_counts[packet[IP].src] += 1
+                    self.global_login_count += 1
 
     def analyze_window(self):
         """Analyzes accumulated login attempts against baseline."""
@@ -77,6 +79,7 @@ class Metin2LoginMonitor:
         duration = now - self.start_time
         if duration < 0.1: duration = 0.1
 
+        # 1. Per-IP Analysis
         for ip, count in self.login_counts.items():
             pps = count / duration
 
@@ -84,34 +87,56 @@ class Metin2LoginMonitor:
             is_anomaly, details = self.baseline.validate_login_rate(pps)
 
             if is_anomaly:
-                self.emit_event(ip, details)
+                self.emit_event(ip, "auth_flood", details)
+
+        # 2. Global Distributed Flood Analysis
+        global_pps = self.global_login_count / duration
+        # Get threshold from config or default to 200
+        global_threshold = self.baseline.config.get("global_login_pps", 200)
+
+        if global_pps > global_threshold:
+            self.emit_event("GLOBAL", "distributed_auth_flood", {
+                "value": global_pps,
+                "threshold": global_threshold,
+                "severity": "CRITICAL",
+                "unique_ips": len(self.login_counts)
+            })
 
         # Reset for next window
         self.login_counts.clear()
+        self.global_login_count = 0
         self.start_time = time.time()
 
-    def emit_event(self, src_ip, details):
+    def emit_event(self, src_ip, event_type, details):
         """Emits a structured JSON event."""
+        # Handle 'details' structure variation
+        value = details.get("value", 0)
+        threshold = details.get("threshold", 0)
+        severity = details.get("severity", "MEDIUM")
+
         event = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "layer": LAYER,
             "game": GAME,
-            "event": "auth_flood",
+            "event": event_type,
             "src_ip": src_ip,
-            "severity": details["severity"],
+            "severity": severity,
             "data": {
-                "pps_observed": round(details["value"], 2),
-                "pps_threshold": details["threshold"],
+                "pps_observed": round(value, 2),
+                "pps_threshold": threshold,
                 "status": "simulated" if self.dry_run else "active"
             }
         }
+
+        if "unique_ips" in details:
+            event["data"]["unique_ips"] = details["unique_ips"]
 
         # STDOUT for Orchestrator
         print(json.dumps(event))
         sys.stdout.flush()
 
         # STDERR for operator logs
-        logging.warning(f"ALERT: Auth flood from {src_ip} ({details['value']:.1f} PPS)")
+        logging.warning(f"ALERT: {event_type} from {src_ip} ({value:.1f} PPS)")
 
     def run(self):
         """Main capture loop."""
@@ -150,6 +175,7 @@ def main():
         # Simulation Mode
         logging.info(f"Simulating flood from {args.test_ip} with {args.test_pps} PPS")
         monitor.login_counts[args.test_ip] = int(args.test_pps)
+        monitor.global_login_count = int(args.test_pps) # Also increment global for test
         monitor.analyze_window()
     else:
         # Live Mode

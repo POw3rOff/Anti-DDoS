@@ -4,7 +4,7 @@ Metin2 Session Abuse Monitor
 Part of Layer G (Game Protocol Defense)
 
 Responsibility: Detects post-handshake anomalies including packet spam (opcode floods),
-idle abuse, keep-alive floods, and rapid channel switching (map abuse).
+idle abuse, keep-alive floods, rapid channel switching, and payload variance (bot detection).
 """
 
 import sys
@@ -14,6 +14,7 @@ import time
 import logging
 import argparse
 import yaml
+import math
 from datetime import datetime, timezone
 from collections import defaultdict
 
@@ -29,7 +30,7 @@ except ImportError as e:
 SCRIPT_NAME = "metin2_session_monitor"
 LAYER = "game"
 GAME = "metin2"
-DEFAULT_GAME_PORT = 13000 # Default Metin2 Game Channel Port
+DEFAULT_GAME_PORT = 13000
 
 # -----------------------------------------------------------------------------
 # Session Monitor Class
@@ -41,13 +42,16 @@ class Metin2SessionMonitor:
         self.port_range = port_range or f"{DEFAULT_GAME_PORT}"
         self.dry_run = dry_run
 
-        # State:
-        # sessions: {src_ip: {pkt_count: int, last_ts: float, start_ts: float}}
-        # opcodes: {src_ip: {opcode_byte: count}}
-        # ports: {src_ip: set(dst_ports)}
+        # State tracking
         self.sessions = defaultdict(lambda: {"pkt_count": 0, "last_ts": time.time(), "start_ts": time.time()})
         self.opcode_counts = defaultdict(lambda: defaultdict(int))
         self.port_history = defaultdict(set)
+
+        # Payload size tracking for variance calculation
+        # {src_ip: [len1, len2, ...]}
+        # We only keep a small sample to save memory
+        self.payload_samples = defaultdict(list)
+        self.max_samples = 50
 
         self.start_window = time.time()
         self.window_size = 1.0
@@ -87,16 +91,25 @@ class Metin2SessionMonitor:
             # Channel/Port tracking
             self.port_history[src_ip].add(dst_port)
 
-            # Opcode Analysis (Payload Inspection)
+            # Payload Inspection
             if Raw in packet:
                 payload = packet[Raw].load
-                if len(payload) > 0:
-                    # Metin2 opcodes are typically the first byte
-                    # Note: Encryption might obfuscate this in production without decryption keys,
-                    # but many private servers or initial handshakes expose raw headers.
-                    # We assume header visibility or specific unencrypted packet types.
+                p_len = len(payload)
+                if p_len > 0:
+                    # Opcode Analysis
                     opcode = payload[0]
                     self.opcode_counts[src_ip][opcode] += 1
+
+                    # Variance Sampling
+                    if len(self.payload_samples[src_ip]) < self.max_samples:
+                        self.payload_samples[src_ip].append(p_len)
+
+    def calculate_variance(self, data):
+        """Calculates standard deviation of a list."""
+        if len(data) < 2: return 0.0
+        mean = sum(data) / len(data)
+        variance = sum((x - mean) ** 2 for x in data) / len(data)
+        return math.sqrt(variance)
 
     def analyze_window(self):
         """Check accumulated metrics against thresholds."""
@@ -106,10 +119,16 @@ class Metin2SessionMonitor:
 
         # Load Thresholds
         max_pps = self.config.get("max_session_pps", 50)
-        max_opcode_pps = self.config.get("max_opcode_pps", 20)
         max_channel_switches = self.config.get("max_channel_switches", 5)
         idle_limit = self.config.get("idle_timeout", 300)
         grace_period = self.config.get("grace_period", 2.0)
+        min_variance = self.config.get("min_payload_variance", 0.0) # 0 means disabled/strict
+
+        # Opcode Rules
+        fallback_opcode_pps = self.config.get("max_opcode_pps", 20)
+        opcode_rules = self.config.get("opcode_rules", {})
+        # Convert keys in config (int/str) to int if needed
+        # YAML keys like 0x12 might be loaded as ints automatically.
 
         ips_to_purge = []
 
@@ -127,33 +146,48 @@ class Metin2SessionMonitor:
                 if pps > max_pps:
                     self.emit_event(ip, "pps_exceeded", pps, max_pps, "HIGH")
 
-                # 3. Opcode Flood Check
+                # 3. Opcode Flood Check (Granular)
                 if ip in self.opcode_counts:
                     for op, count in self.opcode_counts[ip].items():
                         op_pps = count / duration
-                        if op_pps > max_opcode_pps:
-                            self.emit_event(ip, "opcode_flood", op_pps, max_opcode_pps, "HIGH", {"opcode": f"0x{op:02x}"})
+
+                        # Determine threshold
+                        # Try exact match or string representation
+                        limit = opcode_rules.get(op)
+                        if limit is None:
+                            limit = opcode_rules.get(f"0x{op:02x}")
+                        if limit is None:
+                            limit = fallback_opcode_pps
+
+                        if op_pps > limit:
+                            self.emit_event(ip, "opcode_flood", op_pps, limit, "HIGH", {"opcode": f"0x{op:02x}"})
 
                 # 4. Channel Switch Abuse
                 if ip in self.port_history:
                     unique_ports = len(self.port_history[ip])
-                    # This is a cumulative check; usually we'd want rate of switching.
-                    # For now, we check if they touched too many ports in the last window.
-                    # Ideally, port_history should be reset per window or use a sliding window.
-                    # Here we reset it per window for "burst switch" detection.
                     if unique_ports > max_channel_switches:
                          self.emit_event(ip, "channel_switch_abuse", unique_ports, max_channel_switches, "MEDIUM")
 
-            # Reset counters for next window
+                # 5. Payload Variance (Bot Detection)
+                # Only check if enough samples and PPS is significant (avoid FPs on idle clients)
+                if len(self.payload_samples[ip]) > 10 and pps > 5:
+                    std_dev = self.calculate_variance(self.payload_samples[ip])
+                    # If variance is too low (e.g. 0 or close to 0), it's a fixed-packet bot
+                    if std_dev < min_variance:
+                        self.emit_event(ip, "bot_fixed_pattern", std_dev, min_variance, "MEDIUM")
+
+            # Reset counters
             sess["pkt_count"] = 0
 
         # Reset window-scoped aggregators
         self.opcode_counts.clear()
         self.port_history.clear()
+        self.payload_samples.clear()
 
-        # Cleanup idle sessions
+        # Cleanup
         for ip in ips_to_purge:
             del self.sessions[ip]
+            if ip in self.payload_samples: del self.payload_samples[ip]
 
         self.start_window = now
 
@@ -178,13 +212,10 @@ class Metin2SessionMonitor:
         }
         print(json.dumps(event))
         sys.stdout.flush()
-        logging.warning(f"ALERT: {event_type} from {src_ip} (Val: {value:.1f}, Limit: {threshold})")
+        logging.warning(f"ALERT: {event_type} from {src_ip} (Val: {value:.1f})")
 
     def run(self):
         """Main capture loop."""
-        # Construct BPF filter
-        # If port_range is "13000", filter is "tcp dst port 13000"
-        # If "13000-13099", filter is "tcp dst portrange 13000-13099"
         if "-" in self.port_range:
             bpf_filter = f"tcp dst portrange {self.port_range}"
         else:
