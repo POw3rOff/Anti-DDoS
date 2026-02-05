@@ -3,6 +3,7 @@
 # Login Thresholds
 max_login_pps: 5                # Max login attempts per second per source IP
 max_concurrent_sessions: 3      # Max active sessions per IP (anti-multibox)
+global_login_pps: 200           # Max total login attempts per second (Distributed Flood)
 
 # Session Baseline
 min_session_duration: 60        # Seconds (sessions shorter than this are suspicious)
@@ -22,5 +23,13 @@ idle_timeout: 300               # Seconds before considering a session dead
 grace_period: 2.0               # Seconds to allow burst traffic after login
 
 # Advanced Abuse Detection
-max_opcode_pps: 20              # Max packets/sec with identical opcode (anti-spam)
+max_opcode_pps: 20              # Fallback max PPS for unknown opcodes
 max_channel_switches: 4         # Max unique ports accessed in window (anti-teleport abuse)
+min_payload_variance: 1.5       # Min standard deviation of packet sizes (0 = Bot with fixed packets)
+
+# Opcode Specific Rules (Hex Opcode -> Max PPS)
+opcode_rules:
+  0x12: 15                      # Movement (Walk/Run) - Frequent
+  0x30: 3                       # Chat (Global/Normal) - Low frequency
+  0x45: 5                       # Skill Usage - Medium
+  0x50: 2                       # Item Usage - Low
