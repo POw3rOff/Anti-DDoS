@@ -3,9 +3,8 @@
 Under Attack Orchestrator
 Part of 'under_attack_ddos' Defense System.
 
-Responsibility: Central correlation and decision engine.
-Consumes detector events, calculates risk scores, and determines system state.
-NO mitigation actions are performed here.
+Responsibility: Consumes events from all detection layers, calculates Global Risk Score (GRS),
+and determines the system's Operational Mode. Now supports Campaign Alerts.
 """
 
 import sys
@@ -15,9 +14,9 @@ import json
 import logging
 import argparse
 import signal
-import threading
 import queue
-from collections import defaultdict, deque
+import threading
+from collections import defaultdict
 from datetime import datetime, timezone
 
 # Third-party imports
@@ -33,14 +32,19 @@ except ImportError as e:
 # -----------------------------------------------------------------------------
 SCRIPT_NAME = "under_attack_orchestrator"
 LAYER = "orchestration"
-RESPONSIBILITY = "Correlate events and determine global attack state"
+RESPONSIBILITY = "Global State Management & Decision Making"
 
 # Default configuration (Fail-safe)
 DEFAULT_CONFIG = {
     "orchestrator": {
         "window_size_seconds": 30,
-        "cleanup_interval_seconds": 60,
-        "weights": {"layer3": 0.4, "layer4": 0.3, "layer7": 0.3},
+        "weights": {
+            "layer3": 0.4,
+            "layer4": 0.3,
+            "layer7": 0.3,
+            "layer_game": 0.5,
+            "correlation": 1.0  # High weight for pre-correlated alerts
+        },
         "cross_layer_multiplier": 1.5,
         "thresholds": {
             "normal": {"max": 29},
@@ -86,10 +90,8 @@ class EventIngestor(threading.Thread):
             self._tail_file()
         elif self.input_type == 'stdin':
             self._read_stdin()
-        # Socket impl omitted for brevity
 
     def _tail_file(self):
-        # Simple tail implementation
         try:
             with open(self.source, 'r') as f:
                 f.seek(0, 2) # Go to end
@@ -129,6 +131,9 @@ class CorrelationEngine:
 
         # In-memory state: {source_ip: [events...]}
         self.event_buffer = defaultdict(list)
+        # Campaign State: [campaign_alerts...]
+        self.active_campaigns = []
+
         self.lock = threading.Lock()
 
         self.current_state = "NORMAL"
@@ -138,8 +143,14 @@ class CorrelationEngine:
         """Add event to buffer and prune old events."""
         with self.lock:
             now = time.time()
-            # Normalize event timestamp
             event["_recv_time"] = now
+
+            # Special handling for Campaign Alerts (from Cross-Layer Engine)
+            if event.get("type") == "campaign_alert":
+                self.active_campaigns.append(event)
+                # Keep campaigns active for macro window (e.g. 5 mins)
+                self.active_campaigns = [c for c in self.active_campaigns if now - c["_recv_time"] <= 300]
+                return
 
             src = event.get("source_entity", "unknown")
             self.event_buffer[src].append(event)
@@ -155,7 +166,7 @@ class CorrelationEngine:
             active_sources = []
             active_layers = set()
 
-            # Calculate score per source
+            # 1. Evaluate Source-based Risks
             for src, events in self.event_buffer.items():
                 if not events: continue
 
@@ -181,15 +192,23 @@ class CorrelationEngine:
                 if len(layers_seen) > 1:
                     src_score *= self.config["cross_layer_multiplier"]
 
-                # Cap source score
                 src_score = min(src_score, 100.0)
-
-                # Add to total (weighted average or max - adopting MAX strategy for safety)
-                # If ANY single source is critical, system is critical.
                 total_score = max(total_score, src_score)
 
                 if src_score > 30:
                     active_sources.append({"ip": src, "score": round(src_score, 1)})
+
+            # 2. Evaluate Campaign Alerts (High Priority)
+            if self.active_campaigns:
+                # If we have an active campaign, score is at least 80 (UNDER_ATTACK)
+                # If confidence is HIGH, bump to 95 (ESCALATED)
+                for camp in self.active_campaigns:
+                    if camp.get("confidence") == "HIGH":
+                        total_score = max(total_score, 95.0)
+                    else:
+                        total_score = max(total_score, 80.0)
+
+                    active_layers.add("correlation")
 
             # Determine State
             new_state = self._map_score_to_state(total_score)
@@ -200,8 +219,7 @@ class CorrelationEngine:
                 self.last_attack_time = now
 
             if new_state == "NORMAL" and (now - self.last_attack_time < self.config["cooldown_seconds"]):
-                # Hold state if in cooldown
-                return None
+                return None # Hold state
 
             if new_state != self.current_state:
                 self.current_state = new_state
@@ -210,6 +228,7 @@ class CorrelationEngine:
                     "state": self.current_state,
                     "score": round(total_score, 1),
                     "affected_sources": active_sources,
+                    "active_campaigns": [c.get("campaign_name") for c in self.active_campaigns],
                     "active_layers": list(active_layers),
                     "confidence": "HIGH" if len(active_layers) > 1 else "MEDIUM",
                     "decision_id": f"dec-{int(now)}"
@@ -236,15 +255,18 @@ class Orchestrator:
         self.ingestor = EventIngestor(args.input, source, self.queue)
         self.engine = CorrelationEngine(config)
 
+        # State dump file
+        self.state_file = "runtime/global_state.json"
+        os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
+
     def run(self):
         logging.info(f"Starting {SCRIPT_NAME}. Mode: {self.args.mode}")
 
-        # Start Ingestor
         self.ingestor.start()
 
         try:
             while self.running:
-                # 1. Process Queue (Non-blocking)
+                # 1. Process Queue
                 try:
                     while True:
                         event = self.queue.get_nowait()
@@ -252,10 +274,11 @@ class Orchestrator:
                 except queue.Empty:
                     pass
 
-                # 2. Evaluate State (Periodic)
+                # 2. Evaluate State
                 decision = self.engine.evaluate_risk()
                 if decision:
                     self._emit_decision(decision)
+                    self._update_state_file(decision)
 
                 # 3. Sleep
                 time.sleep(1.0)
@@ -270,12 +293,24 @@ class Orchestrator:
             sys.exit(1)
 
     def _emit_decision(self, decision):
-        # Output to STDOUT (piped to mitigation usually)
         print(json.dumps(decision))
         sys.stdout.flush()
-
-        # Log to STDERR
         logging.info(f"STATE CHANGE >>> {decision['state']} (Score: {decision['score']})")
+
+    def _update_state_file(self, decision):
+        """Writes current state to runtime file for Dashboard."""
+        try:
+            with open(self.state_file, 'w') as f:
+                # Map decision to simple state
+                state_dump = {
+                    "mode": decision["state"],
+                    "grs_score": decision["score"],
+                    "last_update": decision["timestamp"],
+                    "campaigns": decision.get("active_campaigns", [])
+                }
+                json.dump(state_dump, f)
+        except Exception as e:
+            logging.error(f"Failed to write state file: {e}")
 
     def stop(self, signum=None, frame=None):
         logging.info("Stopping...")
@@ -287,13 +322,9 @@ class Orchestrator:
 # -----------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description=RESPONSIBILITY)
-
-    # Required Flags
     parser.add_argument("--config", required=True, help="Path to YAML configuration")
     parser.add_argument("--input", default="stdin", choices=["stdin", "file"], help="Input source")
     parser.add_argument("--input-file", help="Path to input file (if input=file)")
-
-    # Optional Flags
     parser.add_argument("--mode", default="normal", choices=["normal", "monitor", "under_attack"], help="Initial mode")
     parser.add_argument("--daemon", action="store_true", help="Run as background service")
     parser.add_argument("--once", action="store_true", help="Run single pass and exit")
@@ -305,7 +336,6 @@ def main():
         print("Error: --input-file required when input is 'file'", file=sys.stderr)
         sys.exit(1)
 
-    # Logging Setup
     logging.basicConfig(
         level=getattr(logging, args.log_level),
         format='%(asctime)s [%(levelname)s] %(message)s',
@@ -313,17 +343,12 @@ def main():
         stream=sys.stderr
     )
 
-    # Initialization
-    logging.info(f"Starting {SCRIPT_NAME} v1.0.0")
     config = ConfigLoader.load(args.config)
-
     orchestrator = Orchestrator(args, config)
 
-    # Signal Handling
     signal.signal(signal.SIGINT, orchestrator.stop)
     signal.signal(signal.SIGTERM, orchestrator.stop)
 
-    # Execution
     orchestrator.run()
 
 if __name__ == "__main__":

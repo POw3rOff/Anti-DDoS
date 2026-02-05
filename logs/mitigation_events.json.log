@@ -1,0 +1,3 @@
+{"timestamp": "2026-02-05T23:26:23.511280+00:00", "level": "CRITICAL", "message": "Transition: NORMAL -> HIGH_ALERT", "details": {"timestamp": "2026-02-05T12:00:00Z", "state": "UNDER_ATTACK", "score": 95, "active_campaigns": ["Multi-Vector Attack"]}}
+{"timestamp": "2026-02-05T23:26:23.519805+00:00", "level": "WARNING", "message": "[DRY-RUN] CAMPAIGN RESPONSE [Multi-Vector Attack]: Isolate affected subnets", "details": {}}
+{"timestamp": "2026-02-05T23:26:23.519947+00:00", "level": "WARNING", "message": "[DRY-RUN] CAMPAIGN RESPONSE [Multi-Vector Attack]: Enable CAPTCHA globally", "details": {}}
