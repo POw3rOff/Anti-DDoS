@@ -88,18 +88,43 @@ class Metin2ProtocolAnomaly(GameProtocolParser):
 
         # 2. Sequence/Header Validation (Heuristic)
         pkt_len = len(payload)
+        min_lengths = self.config.get("handshake_payload_min", {})
+
+        # Defaults
+        min_p1 = min_lengths.get("phase1", 4)
+        min_p2 = min_lengths.get("phase2", 32)
+        min_p3 = min_lengths.get("phase3", 16)
 
         if current_state == STATE_INIT:
-            if pkt_len < 4:
-                self.emit_event("malformed_packet", src_ip, "HIGH", {"len": pkt_len, "reason": "too_short_init"})
+            if pkt_len < min_p1:
+                self.emit_event("malformed_handshake", src_ip, "HIGH", {
+                    "phase": "init",
+                    "len": pkt_len,
+                    "min_required": min_p1
+                })
+                # Do not advance state
             else:
                 self.client_states[src_ip] = {"state": STATE_HEADER_SENT, "ts": now}
 
         elif current_state == STATE_HEADER_SENT:
-            self.client_states[src_ip] = {"state": STATE_KEY_EXCHANGE, "ts": now}
+            if pkt_len < min_p2:
+                self.emit_event("malformed_handshake", src_ip, "HIGH", {
+                    "phase": "key_exchange",
+                    "len": pkt_len,
+                    "min_required": min_p2
+                })
+            else:
+                self.client_states[src_ip] = {"state": STATE_KEY_EXCHANGE, "ts": now}
 
         elif current_state == STATE_KEY_EXCHANGE:
-            self.client_states[src_ip] = {"state": STATE_AUTH_SENT, "ts": now}
+            if pkt_len < min_p3:
+                self.emit_event("malformed_handshake", src_ip, "HIGH", {
+                    "phase": "auth",
+                    "len": pkt_len,
+                    "min_required": min_p3
+                })
+            else:
+                self.client_states[src_ip] = {"state": STATE_AUTH_SENT, "ts": now}
 
         self.client_states[src_ip]["ts"] = now
 

@@ -1,4 +1,4 @@
-## 2026-02-05 - Grace Period Bypass
-**Pattern:** Session monitoring bypass via frequent reconnections.
-**Learning:** The `grace_period` (intended to allow handshake bursts) was implemented as a complete exemption from PPS checks. Attackers could flood packets by resetting the connection every 1.9 seconds, never triggering the >2s check.
-**Prevention:** Always implement bounded checks for exemptions. Added `max_initial_pps` to enforce a ceiling even during grace periods.
+## 2026-02-05 - Handshake State Hardening
+**Pattern:** Fake clients advancing protocol state with zero-payload or short packets.
+**Learning:** The previous state machine advanced unconditionally upon receiving any packet. This allowed "zombie" connections to appear authenticated by sending 3 bytes of garbage.
+**Prevention:** Enforce strict payload minimum lengths for each state transition (`STATE_INIT` > 4B, `KEY` > 32B, `AUTH` > 16B).
