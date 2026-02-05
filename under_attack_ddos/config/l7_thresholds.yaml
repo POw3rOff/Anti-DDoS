@@ -1,0 +1,16 @@
+# Layer 7 Detection Thresholds
+
+# Request Rate Limiting (per IP)
+max_rpm_per_ip: 120              # 2 requests/sec average
+burst_tolerance: 10              # Allow 10 requests in 1 second
+
+# Hot Resource Protection (Global)
+max_rpm_per_resource: 2000       # Alert if a single URL gets hit > 2000 times/min
+monitored_endpoints:
+  - "/login"
+  - "/api/v1/search"
+  - "/register"
+
+# Slow Attack Detection
+min_data_rate: 10                # Bytes/sec. Connections slower than this are suspicious.
+max_connection_duration: 60      # Seconds.
