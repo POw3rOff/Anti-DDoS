@@ -1,0 +1,42 @@
+# Hardening Configuration for Under Attack DDoS System
+# Purpose: Define limits, authentication, and self-protection policies.
+
+security:
+  # Shared secret for internal component authentication
+  # All detectors must include this token in their JSON output: {"auth_token": "..."}
+  auth_token: "CHANGE_ME_IN_PRODUCTION_RANDOMLY_GENERATED_TOKEN_123"
+
+  # Allow only specific users to run critical components (not fully enforced by script, but for reference)
+  allowed_users: ["root", "netadmin"]
+
+input_protection:
+  # Rate limit for incoming events to the Orchestrator (events per second)
+  max_events_per_second: 1000
+
+  # Maximum size of the internal event queue before dropping new events
+  # Prevents Memory Exhaustion (OOM) attacks against the orchestrator
+  internal_queue_size: 5000
+
+  # Drop events older than X seconds (prevent processing stale backlogs)
+  max_event_age_seconds: 5
+
+spoofing_detection:
+  enabled: true
+  # Min TTL variance to consider suspicious (spoofed packets often have fixed or random TTLs inconsistent with path)
+  ttl_variance_threshold: 5
+  # Threshold for Bogon IP detection events
+  bogon_alert_threshold: 1
+
+watchdog:
+  enabled: true
+  check_interval_seconds: 10
+
+  limits:
+    # If a component exceeds these, it will be restarted
+    max_cpu_percent: 80.0
+    max_memory_mb: 512
+
+  monitored_processes:
+    - "under_attack_orchestrator"
+    - "ip_flood_analyzer"
+    - "syn_flood_analyzer"
