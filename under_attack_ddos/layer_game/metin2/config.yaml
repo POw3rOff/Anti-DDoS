@@ -18,6 +18,7 @@ allowed_proto_versions:         # Whitelist of allowed client versions
 
 # Session Abuse Thresholds
 max_session_pps: 50             # Max packets/sec for an established session
+max_initial_pps: 20             # Max packets/sec during grace period (Connection flood prevention)
 max_keepalive_pps: 5            # Max keep-alive/ping packets per second
 idle_timeout: 300               # Seconds before considering a session dead
 grace_period: 2.0               # Seconds to allow burst traffic after login
