@@ -20,6 +20,10 @@ from datetime import datetime, timezone
 try:
     import yaml
     from scapy.all import sniff, IP, TCP
+
+    # Add project root to sys.path to allow importing from common
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+    from under_attack_ddos.common.config import ConfigLoader
 except ImportError as e:
     print(f"CRITICAL: Missing required dependencies: {e}", file=sys.stderr)
     print("Please install: pip install pyyaml scapy", file=sys.stderr)
@@ -45,21 +49,6 @@ DEFAULT_CONFIG = {
 # -----------------------------------------------------------------------------
 # Classes
 # -----------------------------------------------------------------------------
-
-class ConfigLoader:
-    @staticmethod
-    def load(path):
-        if not os.path.exists(path):
-            logging.error(f"Config file not found: {path}")
-            return DEFAULT_CONFIG
-
-        try:
-            with open(path, 'r') as f:
-                user_config = yaml.safe_load(f) or {}
-            return user_config
-        except Exception as e:
-            logging.error(f"Failed to parse config: {e}")
-            sys.exit(2)
 
 class SynFloodAnalyzer:
     def __init__(self, args, config):
@@ -223,7 +212,7 @@ def main():
 
     # Initialization
     logging.info(f"Starting {SCRIPT_NAME} v1.0.0")
-    config = ConfigLoader.load(args.config)
+    config = ConfigLoader.load(args.config, DEFAULT_CONFIG)
 
     analyzer = SynFloodAnalyzer(args, config)
 
