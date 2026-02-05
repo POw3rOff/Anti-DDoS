@@ -60,18 +60,23 @@ class Metin2ProtocolAnomaly(GameProtocolParser):
         Callback for Scapy sniffer.
         Analyzes TCP payload to infer protocol state and detect violations.
         """
-        if IP in packet and TCP in packet and Raw in packet:
+        # Optimization: Use getlayer to avoid repeated traversal
+        ip_layer = packet.getlayer(IP)
+        tcp_layer = packet.getlayer(TCP)
+        raw_layer = packet.getlayer(Raw)
+
+        if ip_layer and tcp_layer and raw_layer:
             # Check destination port (Client -> Server)
-            if packet[TCP].dport == DEFAULT_AUTH_PORT:
-                self._analyze_client_packet(packet)
+            if tcp_layer.dport == DEFAULT_AUTH_PORT:
+                self._analyze_client_packet(ip_layer, raw_layer)
 
         # Periodic cleanup of stale states
         if time.time() - self.last_cleanup > self.cleanup_interval:
             self._cleanup_states()
 
-    def _analyze_client_packet(self, packet):
-        src_ip = packet[IP].src
-        payload = packet[Raw].load
+    def _analyze_client_packet(self, ip_layer, raw_layer):
+        src_ip = ip_layer.src
+        payload = raw_layer.load
 
         # Heuristic State Machine
         current_state = self.client_states[src_ip]["state"]
@@ -88,18 +93,43 @@ class Metin2ProtocolAnomaly(GameProtocolParser):
 
         # 2. Sequence/Header Validation (Heuristic)
         pkt_len = len(payload)
+        min_lengths = self.config.get("handshake_payload_min", {})
+
+        # Defaults
+        min_p1 = min_lengths.get("phase1", 4)
+        min_p2 = min_lengths.get("phase2", 32)
+        min_p3 = min_lengths.get("phase3", 16)
 
         if current_state == STATE_INIT:
-            if pkt_len < 4:
-                self.emit_event("malformed_packet", src_ip, "HIGH", {"len": pkt_len, "reason": "too_short_init"})
+            if pkt_len < min_p1:
+                self.emit_event("malformed_handshake", src_ip, "HIGH", {
+                    "phase": "init",
+                    "len": pkt_len,
+                    "min_required": min_p1
+                })
+                # Do not advance state
             else:
                 self.client_states[src_ip] = {"state": STATE_HEADER_SENT, "ts": now}
 
         elif current_state == STATE_HEADER_SENT:
-            self.client_states[src_ip] = {"state": STATE_KEY_EXCHANGE, "ts": now}
+            if pkt_len < min_p2:
+                self.emit_event("malformed_handshake", src_ip, "HIGH", {
+                    "phase": "key_exchange",
+                    "len": pkt_len,
+                    "min_required": min_p2
+                })
+            else:
+                self.client_states[src_ip] = {"state": STATE_KEY_EXCHANGE, "ts": now}
 
         elif current_state == STATE_KEY_EXCHANGE:
-            self.client_states[src_ip] = {"state": STATE_AUTH_SENT, "ts": now}
+            if pkt_len < min_p3:
+                self.emit_event("malformed_handshake", src_ip, "HIGH", {
+                    "phase": "auth",
+                    "len": pkt_len,
+                    "min_required": min_p3
+                })
+            else:
+                self.client_states[src_ip] = {"state": STATE_AUTH_SENT, "ts": now}
 
         self.client_states[src_ip]["ts"] = now
 
