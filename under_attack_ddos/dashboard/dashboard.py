@@ -11,8 +11,6 @@ import sys
 import os
 import json
 import time
-import asyncio
-import logging
 import argparse
 from datetime import datetime
 
@@ -20,7 +18,7 @@ from datetime import datetime
 try:
     from textual.app import App, ComposeResult
     from textual.containers import Container, Grid, VerticalScroll
-    from textual.widgets import Header, Footer, Static, RichLog, Sparkline, Label, Button
+    from textual.widgets import Header, Footer, Static, RichLog, Sparkline, Label
     from textual.reactive import reactive
     from textual import work
 except ImportError:
@@ -66,9 +64,25 @@ class StatePanel(Static):
 
         # Color coding
         if new_mode == "UNDER_ATTACK": lbl.classes = "critical blink"
-        elif new_mode == "HIGH": lbl.classes = "high"
-        elif new_mode == "ELEVATED": lbl.classes = "elevated"
+        elif new_mode in ["HIGH", "ESCALATED"]: lbl.classes = "high"
+        elif new_mode in ["ELEVATED", "MONITOR"]: lbl.classes = "elevated"
         else: lbl.classes = "normal"
+
+class CampaignPanel(Static):
+    """Displays active campaign alerts."""
+
+    def compose(self) -> ComposeResult:
+        yield Label("Active Campaigns", classes="panel-title")
+        yield RichLog(id="campaign-log", highlight=True, markup=True)
+
+    def update_campaigns(self, campaigns):
+        log = self.query_one(RichLog)
+        log.clear()
+        if not campaigns:
+            log.write("[green]No active campaigns detected.[/green]")
+        else:
+            for c in campaigns:
+                log.write(f"[bold red]⚠ {c}[/bold red]")
 
 class MetricSpark(Static):
     """Real-time sparkline for a specific metric."""
@@ -90,10 +104,11 @@ class MetricSpark(Static):
 class LogPanel(VerticalScroll):
     """Auto-scrolling log viewer."""
     def compose(self) -> ComposeResult:
-        yield RichLog(highlight=True, markup=True)
+        yield Label("System Logs", classes="panel-title")
+        yield RichLog(id="sys-log", highlight=True, markup=True)
 
     def write(self, text):
-        self.query_one(RichLog).write(text)
+        self.query_one("#sys-log", RichLog).write(text)
 
 # -----------------------------------------------------------------------------
 # Main Application
@@ -103,40 +118,58 @@ class SOCDashboard(App):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2;
-        grid-columns: 1fr 2fr;
-        grid-rows: 1fr 2fr;
+        grid-size: 3;
+        grid-columns: 1fr 1fr 2fr;
+        grid-rows: 1fr 3fr;
+        background: ;
     }
 
     #header {
-        column-span: 2;
+        column-span: 3;
         height: 3;
         dock: top;
     }
 
     StatePanel {
-        background: $panel;
-        border: solid $accent;
+        column-span: 1;
+        background: ;
+        border: solid ;
         padding: 1;
-        row-span: 1;
     }
 
-    #metrics-grid {
-        layout: grid;
-        grid-size: 2;
-        border: solid $accent;
-        background: $panel;
+    CampaignPanel {
+        column-span: 1;
+        background: ;
+        border: solid ;
+        padding: 1;
+    }
+
+    #metrics-container {
+        column-span: 1;
+        row-span: 2;
+        background: ;
+        border: solid ;
+        layout: vertical;
     }
 
     MetricSpark {
         padding: 1;
+        height: 8;
     }
 
     LogPanel {
         column-span: 2;
-        border: solid $accent;
-        background: $surface;
-        height: 100%;
+        row-span: 1;
+        border: solid ;
+        background: -darken-1;
+    }
+
+    .panel-title {
+        text-style: bold;
+        background: ;
+        color: ;
+        width: 100%;
+        text-align: center;
     }
 
     .normal { color: green; }
@@ -149,7 +182,6 @@ class SOCDashboard(App):
         text-align: center;
         width: 100%;
         text-style: bold;
-        font-size: 2; # Textual doesn't strictly support font-size like CSS but this is placeholder
     }
     """
 
@@ -157,17 +189,17 @@ class SOCDashboard(App):
         super().__init__()
         self.args = args
         self.state_file = "runtime/global_state.json"
-        self.log_file = "logs/system.json.log"
+        self.log_file = "logs/mitigation_events.json.log"
+        self.log_offset = 0
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield StatePanel(id="state-panel")
+        yield CampaignPanel(id="campaign-panel")
 
-        with Container(id="metrics-grid"):
-            yield MetricSpark("L3 Bandwidth (Mbps)", "blue")
-            yield MetricSpark("L4 SYN Rate", "yellow")
-            yield MetricSpark("L7 Request Rate", "green")
-            yield MetricSpark("Active Bans", "red")
+        with Container(id="metrics-container"):
+            yield MetricSpark("Global Risk Score", "blue")
+            yield MetricSpark("Active Alerts (Last Min)", "red")
 
         yield LogPanel(id="log-panel")
         yield Footer()
@@ -176,17 +208,6 @@ class SOCDashboard(App):
         self.title = "Under Attack DDoS - SOC Dashboard"
         self.set_interval(1.0, self.update_state)
         self.set_interval(0.5, self.tail_logs)
-
-        # Start file watchers
-        if not self.args.demo:
-            self.ensure_files()
-
-    def ensure_files(self):
-        # Create dummy files if missing to prevent crash
-        if not os.path.exists(self.state_file):
-            pass # Expect Orchestrator to create
-        if not os.path.exists(self.log_file):
-            pass
 
     @work(exclusive=True)
     async def update_state(self):
@@ -199,9 +220,19 @@ class SOCDashboard(App):
                 with open(self.state_file, 'r') as f:
                     state = json.load(f)
 
+                # Update State Panel
                 panel = self.query_one(StatePanel)
-                panel.score = state.get("grs_score", 0.0)
+                score = state.get("grs_score", 0.0)
+                panel.score = score
                 panel.mode = state.get("mode", "UNKNOWN")
+
+                # Update Campaign Panel
+                camp_panel = self.query_one(CampaignPanel)
+                camp_panel.update_campaigns(state.get("campaigns", []))
+
+                # Update Sparkline with Score
+                self.query(MetricSpark)[0].add_point(score)
+
         except Exception:
             pass
 
@@ -211,17 +242,33 @@ class SOCDashboard(App):
             await self.simulate_demo_logs()
             return
 
-        # Real implementation would use seek/tell.
-        # For simplicity in this TUI prototype, we read last N lines.
         try:
             if os.path.exists(self.log_file):
-                # Efficiently read last line (placeholder logic)
                 with open(self.log_file, 'r') as f:
-                    lines = f.readlines()
-                    last_lines = lines[-5:]
-                    for line in last_lines:
-                        # Dedup logic would go here
-                        self.query_one(LogPanel).write(line.strip())
+                    # Seek to last known position
+                    if self.log_offset == 0: # First run, go to end
+                        f.seek(0, 2)
+                        self.log_offset = f.tell()
+                    else:
+                        f.seek(self.log_offset)
+
+                    new_lines = f.readlines()
+                    if new_lines:
+                        self.log_offset = f.tell()
+                        for line in new_lines:
+                            try:
+                                data = json.loads(line)
+                                ts = data.get("timestamp", "")[11:19]
+                                lvl = data.get("level", "INFO")
+                                msg = data.get("message", "")
+                                color = "green"
+                                if lvl == "CRITICAL": color = "red"
+                                elif lvl == "WARNING": color = "yellow"
+
+                                fmt_line = f"[{ts}] [{color}]{lvl}[/{color}] {msg}"
+                                self.query_one(LogPanel).write(fmt_line)
+                            except:
+                                self.query_one(LogPanel).write(line.strip())
         except Exception:
             pass
 
@@ -229,32 +276,38 @@ class SOCDashboard(App):
     async def simulate_demo_state(self):
         import random
         panel = self.query_one(StatePanel)
+        camp_panel = self.query_one(CampaignPanel)
 
         # Random walk
         change = random.uniform(-5, 10)
         new_score = max(0, min(100, panel.score + change))
         panel.score = new_score
 
-        if new_score > 90: panel.mode = "UNDER_ATTACK"
-        elif new_score > 60: panel.mode = "HIGH"
-        elif new_score > 30: panel.mode = "ELEVATED"
-        else: panel.mode = "NORMAL"
+        if new_score > 90:
+            panel.mode = "UNDER_ATTACK"
+            camp_panel.update_campaigns(["Volumetric L3 Flood", "API Scraping"])
+        elif new_score > 60:
+            panel.mode = "HIGH"
+            camp_panel.update_campaigns(["Potential Scan"])
+        else:
+            panel.mode = "NORMAL"
+            camp_panel.update_campaigns([])
 
-        # Update metrics
-        sparks = self.query(MetricSpark)
-        for spark in sparks:
-            spark.add_point(random.randint(10, 100))
+        self.query(MetricSpark)[0].add_point(new_score)
+        self.query(MetricSpark)[1].add_point(random.randint(0, 5))
 
     async def simulate_demo_logs(self):
         import random
         if random.random() < 0.3:
             log_panel = self.query_one(LogPanel)
-            layers = ["L3", "L4", "L7", "ORCH"]
-            msgs = ["Threshold exceeded", "New IP banned", "Analysis complete", "Heartbeat"]
-
             ts = datetime.now().strftime("%H:%M:%S")
-            msg = f"[{ts}] [INFO] [{random.choice(layers)}] {random.choice(msgs)}"
-            log_panel.write(msg)
+            msgs = [
+                ("[green]INFO[/green]", "System Normal"),
+                ("[yellow]WARNING[/yellow]", "Rate limit exceeded for IP 1.2.3.4"),
+                ("[red]CRITICAL[/red]", "Campaign Detected: Multi-Vector Attack")
+            ]
+            lvl, msg = random.choice(msgs)
+            log_panel.write(f"[{ts}] {lvl} {msg}")
 
 # -----------------------------------------------------------------------------
 # Launcher
