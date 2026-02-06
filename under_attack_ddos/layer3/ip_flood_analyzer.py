@@ -16,10 +16,6 @@ import signal
 from collections import defaultdict
 from datetime import datetime, timezone
 
-# Ensure project root is in path
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from intelligence.enrichment import GeoIPEnricher
-
 # Third-party imports (assumed available in production environment)
 try:
     import yaml
@@ -87,11 +83,6 @@ class IPFloodAnalyzer:
         else:
             self.pps_threshold = l3_conf.get("normal", 1000)
 
-        self.last_config_check = 0
-        self.config_mtime = 0
-        self.config_path = args.config if args.config else None
-        
-        self.enricher = GeoIPEnricher()
         logging.info(f"Initialized {SCRIPT_NAME}. Mode: {args.mode}. PPS Threshold: {self.pps_threshold}")
 
     def packet_callback(self, packet):
@@ -124,14 +115,6 @@ class IPFloodAnalyzer:
                         "duration": round(duration, 2)
                     }
                 }
-                
-                # Enrichment
-                enrichment = self.enricher.enrich(ip)
-                if enrichment.get("country") != "Unknown":
-                    event["context"] = enrichment
-                    country_tag = f" [{enrichment.get('country')} {enrichment.get('asn')}]"
-                else:
-                    country_tag = ""
 
                 # Dry-run check
                 if self.args.dry_run:
@@ -148,44 +131,10 @@ class IPFloodAnalyzer:
                 print(json.dumps(e))
         elif events:
             for e in events:
-                ctx = e.get("context", {})
-                tag = f" [{ctx.get('country')} {ctx.get('asn')}]" if ctx else ""
-                logging.warning(f"ALERT: {e['event']} from {e['source_entity']}{tag} (PPS: {e['data']['pps_observed']})")
+                logging.warning(f"ALERT: {e['event']} from {e['source_entity']} (PPS: {e['data']['pps_observed']})")
 
         # Reset counters for next window
         self.packet_counts.clear()
-        
-        # Hot Reload Config (Check every 5 seconds)
-        if self.config_path and (time.time() - self.last_config_check) > 5:
-            self._check_config_reload()
-
-    def _check_config_reload(self):
-        """Checks if config file has changed and reloads it."""
-        try:
-            mtime = os.stat(self.config_path).st_mtime
-            if mtime > self.config_mtime:
-                if self.config_mtime == 0:
-                    self.config_mtime = mtime
-                    return
-
-                logging.info("Configuration file changed. Reloading...")
-                new_conf = self._load_config(self.config_path)
-                l3_conf = new_conf.get("layer3", {}).get("pps_ingress", {})
-                
-                # Update Thresholds
-                if self.args.mode == "under_attack":
-                     self.pps_threshold = l3_conf.get("under_attack", 200) # Fallback to default if missing
-                else:
-                     self.pps_threshold = l3_conf.get("normal", 1000)
-
-                # Re-read if source_ip_pps section exists for granularity (future proof)
-                # For now just updating main threshold
-                self.config_mtime = mtime
-                self.last_config_check = time.time()
-                logging.info(f"Config Reloaded. New PPS Threshold: {self.pps_threshold}")
-        except Exception as e:
-            logging.error(f"Failed to hot-reload config: {e}")
-            self.last_config_check = time.time()
 
     def run(self):
         """Main Loop"""
@@ -194,35 +143,15 @@ class IPFloodAnalyzer:
         if self.args.mode == "under_attack":
             window_size = 1.0 # Aggressive sampling
 
-        logging.info(f"Starting {'eBPF ' if self.args.ebpf else ''}capture loop. Window size: {window_size}s")
+        logging.info(f"Starting capture loop. Window size: {window_size}s")
 
         try:
             while self.running:
                 start_loop = time.time()
 
-                if self.args.ebpf:
-                    # 1. Path to loader (assuming same repo structure)
-                    loader_path = os.path.join(os.path.dirname(__file__), "../ebpf/loader.py")
-                    cmd = [sys.executable, loader_path, "--source-stats", "--json"]
-                    if self.args.dry_run: cmd.append("--dry-run")
-                    
-                    try:
-                        import subprocess
-                        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                        ebpf_stats = json.loads(result.stdout)
-                        # ebpf_stats format: {"1.2.3.4": {"packets": 100, "bytes": 1000}, ...}
-                        for ip, stats in ebpf_stats.items():
-                            if isinstance(stats, dict) and "packets" in stats:
-                                self.packet_counts[ip] = stats["packets"]
-                        
-                        time.sleep(window_size) # Wait for next window
-                    except Exception as e:
-                        logging.error(f"Failed to fetch eBPF stats: {e}")
-                        time.sleep(window_size)
-                else:
-                    # Sniff packets for 'window_size' seconds
-                    # store=0 to avoid memory leak
-                    sniff(prn=self.packet_callback, store=0, timeout=window_size)
+                # Sniff packets for 'window_size' seconds
+                # store=0 to avoid memory leak
+                sniff(prn=self.packet_callback, store=0, timeout=window_size)
 
                 # Analyze
                 duration = time.time() - start_loop
@@ -259,7 +188,6 @@ def main():
     parser.add_argument("--daemon", action="store_true", help="Run as background service")
     parser.add_argument("--once", action="store_true", help="Run single pass and exit")
     parser.add_argument("--json", action="store_true", help="Output JSON events to STDOUT")
-    parser.add_argument("--ebpf", action="store_true", help="Use eBPF sensors for metrics")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Log verbosity")
 
     args = parser.parse_args()
@@ -277,14 +205,10 @@ def main():
         stream=sys.stderr # Logs go to stderr
     )
 
-    # Root Check
-    is_root = False
-    try:
-        is_root = (os.geteuid() == 0)
-    except AttributeError:
-        is_root = False
-
-    if not is_root and not args.dry_run:
+    # Root Check (Scapy needs root for sniffing)
+    if os.geteuid() != 0 and not args.dry_run:
+        # Note: In dry-run we might allow non-root if reading from pcap (future feature),
+        # but for live sniffing we need privileges.
         logging.warning("Not running as root. Sniffing might fail or show limited packets.")
 
     # Initialization

@@ -168,7 +168,7 @@ def main():
         elif args.test_type == "zombie":
              detector.emit_event("zombie_connection", args.test_ip, "HIGH", {"state": 1, "duration": 6.0})
     else:
-        if sys.platform != "win32" and os.geteuid() != 0:
+        if os.geteuid() != 0:
             logging.warning("Not running as root. Sniffing might fail.")
         detector.run()
 
