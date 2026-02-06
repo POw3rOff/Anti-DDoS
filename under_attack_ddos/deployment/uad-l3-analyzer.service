@@ -1,6 +1,7 @@
 [Unit]
 Description=Under Attack L3 IP Flood Analyzer
 After=network.target
+StartLimitIntervalSec=0
 
 [Service]
 # Needs root for eBPF/XDP attachment

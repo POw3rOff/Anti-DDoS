@@ -1,6 +1,7 @@
 [Unit]
 Description=Under Attack Orchestrator
 After=network.target
+StartLimitIntervalSec=0
 
 [Service]
 User=uad-orch

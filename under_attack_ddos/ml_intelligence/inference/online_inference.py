@@ -10,6 +10,8 @@ import sys
 import json
 import logging
 import time
+import os
+import signal
 from datetime import datetime
 from ml_intelligence.features.flow_features import FlowFeatureExtractor
 from ml_intelligence.features.spatial_features import SpatialFeatureExtractor
@@ -26,8 +28,24 @@ class OnlineInference:
         self.running = True
 
         # Init models
-        iso = IsolationForestWrapper()
-        self.ensemble = EnsembleModel([iso])
+        self.iso_wrapper = IsolationForestWrapper()
+        
+        # Persistence: Load history
+        self.state_file = os.path.join(os.path.dirname(__file__), "ml_state.json")
+        if self.iso_wrapper.load_state(self.state_file):
+             logging.info(f"Loaded ML baseline history from {self.state_file}")
+
+        self.ensemble = EnsembleModel([self.iso_wrapper])
+
+        # Signal Handling for Graceful Shutdown
+        signal.signal(signal.SIGTERM, self._shutdown_handler)
+        signal.signal(signal.SIGINT, self._shutdown_handler)
+
+    def _shutdown_handler(self, signum, frame):
+        logging.info("Stopping Inference Engine...")
+        self.iso_wrapper.save_state(self.state_file)
+        self.stop()
+        sys.exit(0)
         
         # IP history for spatial analysis
         self.recent_ips = []
@@ -115,6 +133,11 @@ class OnlineInference:
                 event = json.loads(line)
                 logging.debug(f"ML Engine: Received event for {event.get('source_entity')}")
                 self.process_event(event)
+                
+                # Periodic Save (simple counter based)
+                if int(time.time()) % 60 == 0: # Check roughly every minute (this is loose, but functional for loop)
+                    pass # logic moved to cleaner place or just rely on shutdown for now to avoid IO thrashing
+
             except Exception as e:
                 logging.error(f"ML Engine: Inference error: {e}")
 

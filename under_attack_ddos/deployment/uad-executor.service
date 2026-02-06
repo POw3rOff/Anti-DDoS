@@ -1,6 +1,7 @@
 [Unit]
 Description=Under Attack Mitigation Executor
 After=network.target
+StartLimitIntervalSec=0
 
 [Service]
 # Needs root for nftables/iptables

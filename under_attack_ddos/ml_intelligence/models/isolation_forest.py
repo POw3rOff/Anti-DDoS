@@ -7,6 +7,9 @@ Responsibility: Detect anomalies in feature vectors.
 """
 
 import random
+import json
+import os
+import statistics
 
 import statistics
 
@@ -45,3 +48,29 @@ class IsolationForestWrapper:
             self.history.pop(0)
 
         return 1
+
+    def save_state(self, filepath):
+        """Saves current baseline history to disk."""
+        try:
+            with open(filepath, 'w') as f:
+                json.dump(self.history, f)
+            return True
+        except Exception as e:
+            # logging not imported in this class file usually, but we can print or ignore
+            print(f"Failed to save state: {e}")
+            return False
+
+    def load_state(self, filepath):
+        """Loads baseline history from disk."""
+        try:
+            with open(filepath, 'r') as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    # Validate dimension
+                    self.history = [x for x in data if len(x) == 3]
+            return True
+        except FileNotFoundError:
+            return False
+        except Exception as e:
+            print(f"Failed to load state: {e}")
+            return False

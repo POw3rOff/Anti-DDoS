@@ -54,10 +54,44 @@ class eBPFManager:
             fn = self.bpf.load_func("xdp_dispatcher", BPF.XDP)
             logging.info(f"Attaching XDP program to {self.interface}...")
             self.bpf.attach_xdp(self.interface, fn, 0)
+            
+            # Persistence: Pin maps to /sys/fs/bpf/
+            self.pin_maps()
+            
             return True
         except Exception as e:
             logging.error(f"Failed to load BPF: {e}")
             return False
+
+    def pin_maps(self):
+        """Pins BPF maps to the filesystem for persistence."""
+        PIN_DIR = "/sys/fs/bpf/uad"
+        if not os.path.exists(PIN_DIR):
+            try:
+                os.makedirs(PIN_DIR)
+            except OSError:
+                logging.warning(f"Could not create {PIN_DIR}. Persistence might fail.")
+                return
+
+        pinned_maps = ["map_blacklist", "map_source_stats", "map_syn_stats"]
+        for map_name in pinned_maps:
+            try:
+                map_obj = self.bpf.get_table(map_name)
+                pin_path = f"{PIN_DIR}/{map_name}"
+                # Unpin if exists to refresh (or we could chose to reload, but simple reload is safer for now)
+                if os.path.exists(pin_path):
+                    os.unlink(pin_path)
+                
+                # Check for BCC version compatibility or use raw libbpf logic if needed
+                # BCC Python `pinned` support varies. We'll use the .pin() method if available
+                # or warn if not.
+                if hasattr(map_obj, "pin"):
+                    map_obj.pin(pin_path)
+                    logging.info(f"Pinned {map_name} to {pin_path}")
+                else:
+                    logging.warning(f"Map {map_name} object has no pin() method. BCC version too old?")
+            except Exception as e:
+                logging.warning(f"Failed to pin {map_name}: {e}")
 
     def unload(self):
         """Detaches the XDP program."""

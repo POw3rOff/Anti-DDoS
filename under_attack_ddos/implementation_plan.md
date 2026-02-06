@@ -321,3 +321,50 @@ Complete the simulation and verification coverage for the full list of user-spec
 4. **Unreal**: python simulations/game_attack_sim.py --type unreal --pps 150 -> Expect unreal_flood.
 5. **Generic**: python simulations/game_attack_sim.py --type generic --payload 'deadbeef' -> Expect signature_match (if config matches).
 
+
+# Phase 16: Persistence Hardening
+
+## Goal
+Ensure the system's defensive state survives process restarts and system reboots. This is critical for maintaining protection/baselines during maintenance or crash recovery.
+
+## Proposed Changes
+
+### 1. eBPF Map Persistence
+- **[MODIFY] [loader.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/ebpf/loader.py)**:
+    - Implement pin_maps() method to pin map_blacklist to /sys/fs/bpf/uad_blacklist.
+    - Modify load() to check for existing pinned maps and reuse them if available.
+    - This ensures that if the Python loader crashes, the XDP program and its specific blacklist remain active and accessible upon restart.
+
+### 2. ML Model Persistence
+- **[MODIFY] [isolation_forest.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/ml_intelligence/models/isolation_forest.py)**:
+    - Add save_state(filepath): Validates and writes self.history to a JSON file.
+    - Add load_state(filepath): Reads history from disk, populating the baseline.
+- **[MODIFY] [online_inference.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/ml_intelligence/inference/online_inference.py)**:
+    - Call load_state on startup.
+    - Call save_state on graceful shutdown (SIGTERM) and periodically (e.g., every 100 updates).
+
+### 3. Service Hardening
+- **[MODIFY] [deployment/*.service]**:
+    - Add StartLimitIntervalSec=0 to ensure infinite restart attempts (avoiding 'start request repeated too quickly' permanent failure).
+
+## Verification Plan
+
+### Automated Tests
+- **[NEW] [persistence_test.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/test_suite/persistence_test.py)**:
+    - **ML Test**: Init model, add history, save, clear memory, load, verify history exists.
+    - **eBPF Test**: (Mocked) Verify calls to bpf_obj_pin or equivalent.
+
+### Manual Verification
+1. **ML Persistence**:
+    - Run online_inference.py.
+    - Feed 50 events.
+    - Ctrl+C (trigger save).
+    - Restart.
+    - Verify logs show 'Loaded 50 history items'.
+2. **eBPF Persistence** (requires Linux/Root):
+    - Run loader.py --load.
+    - Run loader.py --block 1.2.3.4.
+    - Kill the loader process.
+    - Restart loader.py --stats.
+    - Verify 1.2.3.4 is still blocked (if ls /sys/fs/bpf shows the pin).
+
