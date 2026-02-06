@@ -63,6 +63,11 @@ class FiveMMonitor(GameProtocolParser):
                 # Malformed pack weights
                 if len(payload) < 3:
                     self.packet_counts[src_ip] += 1 # Weighted
+                
+                # FiveM Enet Null-Byte Flood
+                # Often purely null bytes or repeating patterns
+                if all(b == 0 for b in payload):
+                     self.packet_counts[src_ip] += 5 # High penalty for null flood
 
     def analyze(self):
         now = time.time()

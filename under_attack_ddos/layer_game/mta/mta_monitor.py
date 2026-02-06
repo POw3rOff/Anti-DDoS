@@ -40,12 +40,22 @@ class MTAMonitor(GameProtocolParser):
         self.last_reset = time.time()
         
         self.max_pps = self.config.get("max_pps_per_ip", 50)
+        self.ase_counts = defaultdict(int)
+        self.max_ase_pps = 5
 
     def packet_callback(self, packet):
         """Processes UDP traffic on MTA port."""
         if IP in packet and UDP in packet:
             src_ip = packet[IP].src
             self.packet_counts[src_ip] += 1
+            
+            if Raw in packet:
+                payload = packet[Raw].load
+                # ASE Query: 's' (0x73) usually at start of payload for ASE protocol
+                # MTA ASE port is usually BasePort + 123
+                # But here we inspect payload for simple signature
+                if len(payload) > 0 and payload[0] == 0x73:
+                    self.ase_counts[src_ip] += 1
 
     def analyze(self):
         now = time.time()
@@ -59,8 +69,17 @@ class MTAMonitor(GameProtocolParser):
                     "pps": round(pps, 1),
                     "threshold": self.max_pps
                 })
+        
+        for ip, count in list(self.ase_counts.items()):
+            pps = count / duration
+            if pps > self.max_ase_pps:
+                self.emit_event("mta_ase_flood", ip, "MEDIUM", {
+                    "pps": round(pps, 1),
+                    "threshold": self.max_ase_pps
+                })
 
         self.packet_counts.clear()
+        self.ase_counts.clear()
         self.last_reset = now
 
     def run(self):

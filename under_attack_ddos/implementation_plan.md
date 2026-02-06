@@ -226,3 +226,62 @@ Improve the precision of detection by linking events across different layers and
 1. Run the Correlator: `python correlation/cross_layer_correlation_engine.py`. Boris? No, Antigravity.
 2. Inject mapped L4/L7 events. Boris? No, Antigravity.
 3. Verify the output JSON for the expected campaign type. Boris? No, Antigravity.
+
+# Phase 13: Game Layer Expansion (Source & GTA)
+
+## Goal
+Expand the Game Layer to provide robust protection for Valve Source Engine (CS:GO, Rust, etc.) and GTA Multiplayers (MTA/SAMP).
+
+## Proposed Changes
+
+### 1. Source Engine (A2S) Monitor
+- **[MODIFY] [source_monitor.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/source/source_monitor.py)**:
+    - Implement caching to detect A2S_INFO spam from same IPs.
+    - Add detection for A2S_PLAYER/A2S_RULES queries (often used for amplification).
+
+### 2. MTA/SAMP Monitor
+- **[MODIFY] [mta_monitor.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/mta/mta_monitor.py)**:
+    - Add detection for ASE (All-Seeing Eye) query floods (used for server browser lists).
+    - Differentiate between game traffic (Enet) and query traffic.
+
+### 3. Simulator Update
+- **[MODIFY] [game_attack_simulator.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/test_suite/game_attack_simulator.py)**:
+    - Add `source_query` mode to generate A2S_INFO packets.
+    - Add `mta_ase` mode to generate ASE queries.
+
+## Verification Plan
+
+### Automated Tests
+- Extend `game_attack_simulator.py` to target the new monitors.
+- Verify detection logs.
+
+# Phase 14: Game Layer Hardening (SAMP, FiveM, TS3)
+
+## Goal
+Complete the Game Layer hardening by improving detection for San Andreas Multiplayer (SAMP), FiveM, and TeamSpeak 3.
+
+## Proposed Changes
+
+### 1. SAMP Monitor
+- **[MODIFY] [samp_monitor.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/samp/samp_monitor.py)**:
+    - Differentiate query types: 'i' (Info), 'r' (Rules), 'c' (Clients), 'd' (Details).
+    - Apply higher penalty weights to 'c' (Client List) and 'r' (Rules) queries as they utilize more server CPU.
+
+### 2. FiveM Monitor
+- **[MODIFY] [fivem_monitor.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/fivem/fivem_monitor.py)**:
+    - Harden detection for "getinfo" floods.
+    - Add detection for common Enet exploit patterns (e.g., null-payload floods).
+
+### 3. TeamSpeak 3 Monitor
+- **[MODIFY] [ts3_monitor.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/ts3/ts3_monitor.py)**:
+    - Implement heuristic detection for TS3Init packet floods (Client/Server handshake simulation).
+    - Detect generic fixed-size UDP floods often used against TS3 ports.
+
+### 4. Simulator Update
+- **[MODIFY] [game_attack_simulator.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/test_suite/game_attack_simulator.py)**:
+    - Add `samp_query` generator (supporting types i, r, c).
+    - Add `fivem_info` generator.
+    - Add `ts3_flood` generator.
+
+## Verification Plan
+- Extend verify simulation to cover these 3 new protocols.

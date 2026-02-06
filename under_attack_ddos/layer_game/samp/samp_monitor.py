@@ -51,8 +51,18 @@ class SAMPMonitor(GameProtocolParser):
 
             # --- SAMP / RakNet Packet Detection ---
             # SAMP Query usually starts with 'SAMP' followed by IP (4 bytes) and Port (2 bytes)
+            # Then the Opcode char: 'i', 'r', 'c', 'd', 'p', etc.
             if payload.startswith(b'SAMP'):
-                self.query_counts[src_ip] += 1
+                weight = 1
+                if len(payload) > 10: 
+                    opcode = payload[10] # 4 (SAMP) + 4 (IP) + 2 (Port) = 10th index
+                    # 'c' (Clients) and 'r' (Rules) are heavy
+                    if opcode in [0x63, 0x72]: # 'c', 'r'
+                        weight = 5
+                    elif opcode == 0x70: # 'p' (Ping)
+                        weight = 1
+                    
+                self.query_counts[src_ip] += weight
                 return
 
             # join packet detection (simplistic)

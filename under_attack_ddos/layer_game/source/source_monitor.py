@@ -41,6 +41,7 @@ class SourceMonitor(GameProtocolParser):
         self.last_reset = time.time()
         
         self.max_query_pps = self.config.get("max_query_pps", 3)
+        self.max_players_pps = self.config.get("max_players_pps", 1)  # Stricter for A2S_PLAYER
 
     def packet_callback(self, packet):
         """Processes UDP traffic on Source Engine port."""
@@ -50,8 +51,16 @@ class SourceMonitor(GameProtocolParser):
 
             # --- Source Engine Query (A2S_INFO) Detection ---
             # Prefix: 4x 0xFF, followed by 0x54 (A2S_INFO)
-            if payload.startswith(b'\xff\xff\xff\xff\x54'):
-                self.query_counts[src_ip] += 1
+            # Prefix: 4x 0xFF, followed by 0x54 (A2S_INFO)
+            # A2S_PLAYER (0x55), A2S_RULES (0x56) are also heavy.
+            if payload.startswith(b'\xff\xff\xff\xff'):
+                if len(payload) > 4:
+                    header = payload[4]
+                    if header == 0x54: # A2S_INFO
+                         self.query_counts[src_ip] += 1
+                    elif header in [0x55, 0x56]: # A2S_PLAYER / RULES
+                         # Weight these higher or track separately
+                         self.query_counts[src_ip] += 5 # 5x weight for heavier queries
 
     def analyze(self):
         now = time.time()

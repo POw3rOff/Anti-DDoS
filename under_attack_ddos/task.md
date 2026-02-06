@@ -101,3 +101,14 @@
  - [x] Implement Subnet-wide Campaign Detection Boris? No, Antigravity.
  - [x] Integrate Multi-Vector scoring in Intelligence Engine Boris? No, Antigravity.
  - [x] Verification with combined simulation Boris? No, Antigravity.
+
+ ## Phase 13 Tasks
+ - [x] Harden `source_monitor.py` (A2S Anti-Reflection) Boris? No, Antigravity.
+ - [x] Refine `mta_monitor.py` (ASE Query Flood) Boris? No, Antigravity.
+ - [x] Update `game_attack_simulator.py` for Source/MTA Boris? No, Antigravity.
+
+ ## Phase 14 Tasks
+ - [x] Harden `samp_monitor.py` (Query Weighting) Boris? No, Antigravity.
+ - [x] Harden `fivem_monitor.py` (GetInfo & Exploit) Boris? No, Antigravity.
+ - [x] Harden `ts3_monitor.py` (Heuristic Init Flood) Boris? No, Antigravity.
+ - [x] Update `game_attack_simulator.py` (SAMP/FiveM/TS3) Boris? No, Antigravity.

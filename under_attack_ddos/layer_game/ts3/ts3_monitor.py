@@ -40,6 +40,8 @@ class TS3Monitor(GameProtocolParser):
         self.last_reset = time.time()
         
         self.max_handshake_pps = self.config.get("max_handshake_pps", 5)
+        self.init_counts = defaultdict(int)
+        self.fixed_size_counts = defaultdict(int)
 
     def packet_callback(self, packet):
         """Processes UDP traffic on TS3 port."""
@@ -51,7 +53,16 @@ class TS3Monitor(GameProtocolParser):
             # TS3 packets have a header, usually starts with some specific bytes
             # Simple check for very common handshake/query patterns if possible
             # Here we just track general PPS for now as a baseline
-            self.handshake_counts[src_ip] += 1
+            # TS3 Handshake / Command Detection
+            # TS3Init often starts with specific bytes, but encrypts later. 
+            # We look for rapid bursts of "Init" size packets (e.g. ~30-60 bytes range)
+            # or massive fixed-size floods (e.g. exactly 100 bytes repeatedly)
+            p_len = len(payload)
+            
+            if 30 <= p_len <= 60:
+                self.init_counts[src_ip] += 1
+            else:
+                self.handshake_counts[src_ip] += 1
 
     def analyze(self):
         now = time.time()
@@ -65,8 +76,17 @@ class TS3Monitor(GameProtocolParser):
                     "pps": round(pps, 1),
                     "threshold": self.max_handshake_pps
                 })
+        
+        for ip, count in list(self.init_counts.items()):
+            pps = count / duration
+            if pps > (self.max_handshake_pps * 2): # Init packets can be bursty, so higher threshold
+                self.emit_event("ts3_init_flood", ip, "HIGH", {
+                    "pps": round(pps, 1),
+                    "details": "Heuristic Init Packet Flood"
+                })
 
         self.handshake_counts.clear()
+        self.init_counts.clear()
         self.last_reset = now
 
     def run(self):
