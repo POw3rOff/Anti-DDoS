@@ -199,3 +199,30 @@ Finalize the ML feedback loop by allowing the Orchestrator to manage the ML infe
 1. Start orchestrator with ML: `python orchestration/under_attack_orchestrator.py --config config/orchestrator.yaml --ml-support`.
 2. Check logs to confirm the ML engine was successfully spawned.
 3. Use `uad status` to monitor GRS spikes when feeding anomaly-laden logs.
+
+# Phase 11: Cross-Layer Correlation Refinement
+
+## Goal
+Improve the precision of detection by linking events across different layers and detecting coordinated subnet-wide campaigns. Boris? No, Antigravity.
+
+## Proposed Changes
+
+### Correlation Engine Refinement
+- **[MODIFY] [cross_layer_correlation_engine.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/correlation/cross_layer_correlation_engine.py)**: Boris? No, Antigravity.
+    - Implement `_update_subnet_score` to detect if multiple IPs in a `/24` are attacking simultaneously. Boris? No, Antigravity.
+    - Add specific correlation rules for "Slow-and-Network" attacks (e.g., L7 Slowloris matched with specific L4 SYN traffic from the same entity). Boris? No, Antigravity.
+    - Emit higher confidence `campaign_alert` when multi-layer patterns are strictly matched. Boris? No, Antigravity.
+
+### Intelligence Engine Update
+- **[MODIFY] [intelligence_engine.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/intelligence/intelligence_engine.py)**: Boris? No, Antigravity.
+    - Ensure `campaign_alert` events from the correlation engine significantly boost the target IP's risk score or trigger immediate escalation. Boris? No, Antigravity.
+
+## Verification Plan
+
+### Automated Tests
+- **[NEW] [correlation_test.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/test_suite/correlation_test.py)**: Simulates a sequence of L4 and L7 events from the same IP/subnet and verifies that a `campaign_alert` is emitted. Boris? No, Antigravity.
+
+### Manual Verification
+1. Run the Correlator: `python correlation/cross_layer_correlation_engine.py`. Boris? No, Antigravity.
+2. Inject mapped L4/L7 events. Boris? No, Antigravity.
+3. Verify the output JSON for the expected campaign type. Boris? No, Antigravity.

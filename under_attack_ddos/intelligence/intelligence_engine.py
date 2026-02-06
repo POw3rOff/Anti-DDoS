@@ -80,7 +80,10 @@ class IntelligenceEngine:
         if active_campaigns:
             for camp in active_campaigns:
                 global_active_layers.add("correlation")
-                if camp.get("confidence") == "HIGH":
+                conf = camp.get("confidence")
+                if conf == "CRITICAL":
+                    total_score = max(total_score, 100.0)
+                elif conf == "HIGH":
                     total_score = max(total_score, 95.0)
                 else:
                     total_score = max(total_score, 80.0)
