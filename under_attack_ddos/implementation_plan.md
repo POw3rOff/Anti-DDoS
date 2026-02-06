@@ -1,56 +1,65 @@
-# Implementation Plan - Phase 7: Observability and Management
+[2026-02-06] STATUS UPDATE
+	•	Reference: ML Intelligence Layer
+	•	New Status: COMPLETED
+	•	Notes: ML-based anomaly detection implemented and integrated.
 
-This plan outlines the implementation of the Alert Manager and the Global CLI Tool (Human Interface) for the `under_attack_ddos` system, completing Phase 7 of the roadmap.
+[2026-02-06] STATUS UPDATE
+	•	Reference: Phase 7: Orchestration & Observability
+	•	New Status: IN_PROGRESS
+	•	Notes: Starting implementation of Alert Manager and CLI tool.
 
-## User Review Required
+# Phase 7: Orchestration & Observability Implementation Plan
 
-> [!IMPORTANT]
-> - The Alert Manager will require Slack Webhook URLs, SMTP credentials, or PagerDuty API keys to be functional. These should be provided by the user in `config/observability.yaml`.
-> - The CLI tool `uad` will require root privileges for some commands (e.g., `panic` mode which may interact with system firewalls).
+## Goal
+Centralize system management and alerting. This phase implements the `AlertManager` for notifications and the `uad` CLI tool for operational control.
 
 ## Proposed Changes
 
-### Configuration
-#### [NEW] [observability.yaml](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/config/observability.yaml)
-Create a new configuration file for alerting channels and templates.
-#### [MODIFY] [orchestrator.yaml](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/config/orchestrator.yaml)
-Add a reference to the alerting configuration.
+### Alert Manager
+- **`alerts/alert_manager.py`**: A new component that subscribes to high-severity events and triggers external notifications (e.g., Log file, Slack webhook mock).
+- **Core logic**: Deduplication of alerts and severity-based routing.
 
----
+### CLI Tool (`uad`)
+- **`uad.py`**: A unified CLI for managing the suite.
+- **Commands**:
+  - `status`: Show GRS, state, and active mitigations.
+  - `start`/`stop`: Manage systemd services.
+  - `logs`: Tail system logs with color coding.
+  - `panic`: Force system into `ESCALATED` mode and block everything.
 
-### Alert Manager Component
-#### [NEW] [alert_manager.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/observability/alert_manager.py)
-A new module responsible for:
-- Monitoring `runtime/global_state.json` or receiving signals from the Orchestrator.
-- Sending notifications to Slack, Email, and PagerDuty based on severity and mode changes.
-- Rate limiting alerts to avoid fatigue (e.g., maximum one alert per mode change).
+#### [NEW] [minecraft_monitor.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/minecraft/minecraft_monitor.py)
+- Detects Handshake/Status ping floods.
 
----
+#### [NEW] [fivem_monitor.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/fivem/fivem_monitor.py)
+- Monitors CitizenFX heartbeats and Enet traffic.
 
-### Orchestration Integration
-#### [MODIFY] [under_attack_orchestrator.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/orchestration/under_attack_orchestrator.py)
-Enhance the orchestrator to trigger the Alert Manager during `state_change` events.
+#### [NEW] [source_monitor.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/source/source_monitor.py)
+- Replaces CS:GO monitor; protects all Source Engine games (A2S Query floods).
 
----
+#### [NEW] [samp_monitor.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/samp/samp_monitor.py)
+- Detects Join floods and malformed RakNet packets.
 
-### Management Interface (CLI)
-#### [NEW] [uad.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/uad.py)
-A unified CLI tool for human operators:
-- `uad status`: Shows current GRS and Mode (TUI-lite or text).
-- `uad logs`: Tails the most relevant logs.
-- `uad panic`: Immediately triggers `UNDER_ATTACK` mode and blocks non-VIP traffic.
-- `uad health`: Checks if all detection and orchestration services are running.
+#### [NEW] [mta_monitor.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/mta/mta_monitor.py)
+- Protects against Enet-based sync floods.
+
+#### [NEW] [ts3_monitor.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/ts3/ts3_monitor.py)
+- Detects TeamSpeak 3 handshake floods and reflection attempts.
+
+#### [NEW] [unreal_monitor.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/unreal/unreal_monitor.py)
+- Initial support for Unreal Engine 4/5 (Ark, Palworld) protocol anomalies.
+
+#### [MODIFY] [task.md](file:///C:/Users/valet/.gemini/antigravity\brain\ed79bed1-8c85-4fc5-8cba-8ebcf8b5440e/task.md)
+- Add tasks for Minecraft, FiveM, and CS:GO monitors.
+
+### Orchestrator Integration
+- Update `Orchestrator` to emit events to the `AlertManager` when state transitions or critical mitigations occur.
 
 ## Verification Plan
 
 ### Automated Tests
-- **Unit Tests for Alert Manager**: Create `test_suite/test_alert_manager.py` using `unittest.mock` to verify Slack and SMTP logic without sending real traffic.
-  ```bash
-  python -m unittest test_suite/test_alert_manager.py
-  ```
-- **Integration Test**: Create a simulation script that triggers a mode change in the Orchestrator and verifies that a mock Alert Manager receives the event.
+- CLI command unit tests (mocking subprocess calls).
+- Alert deduplication verification.
 
 ### Manual Verification
-- Run `python uad.py status` to check system visibility.
-- Run `python uad.py panic` and verify `runtime/global_state.json` reflects the change.
-- Verify log output of `alert_manager.py` when a simulated attack occurs.
+1. Run `uad status` and verify output.
+2. Trigger an alert and check the alert log/mock output.
