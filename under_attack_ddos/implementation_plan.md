@@ -368,3 +368,41 @@ Ensure the system's defensive state survives process restarts and system reboots
     - Restart loader.py --stats.
     - Verify 1.2.3.4 is still blocked (if ls /sys/fs/bpf shows the pin).
 
+
+# Phase 17: Context Enrichment (GeoIP)
+
+## Goal
+Enrich system alerts and logs with Geographical (Country, City) and Network (ASN) data. This provides context for operators to identify attack sources (e.g., 'Botnet from Country X').
+
+## Proposed Changes
+
+### 1. Enrichment Logic
+- **[NEW] [intelligence/enrichment.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/intelligence/enrichment.py)**:
+    - GeoIPEnricher class.
+    - Uses geoip2 library (if installed) and GeoLite2-City.mmdb / GeoLite2-ASN.mmdb.
+    - **Fallback**: Returns 'Unknown' if lib/db missing, preventing crashes.
+
+### 2. Integration
+- **[MODIFY] [alert_manager.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/alerts/alert_manager.py)**:
+    - Initialize GeoIPEnricher.
+    - In process_alert, call enrich_ip(target_ip) and append data to the alert context.
+- **[MODIFY] [uad.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/uad.py)**:
+    - Add lookup <IP> command to query the enricher directly from CLI.
+
+### 3. Dependencies
+- **[NEW] [requirements.txt](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/requirements.txt)**:
+    - Add geoip2>=4.0.0.
+
+## Verification Plan
+
+### Automated Tests
+- **[NEW] [enrichment_test.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/test_suite/enrichment_test.py)**:
+    - Mock geoip2 database reader.
+    - Verify enrich_ip returns expected dict structure.
+    - Verify graceful handling of missing library.
+
+### Manual Verification
+1.  **CLI Lookup**:
+    - Run python uad.py lookup 8.8.8.8.
+    - Verify output (either Real data if DB present, or 'GeoIP module not available/DB missing' warning).
+

@@ -11,6 +11,7 @@ import os
 import subprocess
 import time
 from datetime import datetime
+from intelligence.enrichment import GeoIPEnricher
 
 STATE_FILE = "runtime/global_state.json"
 SERVICES = [
@@ -90,6 +91,19 @@ def panic_mode():
         f.write("ESCALATED")
     print("Panic signal sent. Global Orchestrator will react on next tick.")
 
+def lookup_ip(ip):
+    """Enriches an IP address with Geo/ASN data."""
+    enricher = GeoIPEnricher()
+    data = enricher.enrich(ip)
+    
+    print(f"\n=== IP Intelligence: {ip} ===")
+    print(f"  Country: {data.get('country', 'Unknown')}")
+    print(f"  City:    {data.get('city', 'Unknown')}")
+    print(f"  ASN:     {data.get('asn', 'Unknown')}")
+    print(f"  Org:     {data.get('org', 'Unknown')}")
+    print("================================\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description="UAD Command Line Interface")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -101,6 +115,9 @@ def main():
 
     subparsers.add_parser("logs", help="Tail system logs")
     subparsers.add_parser("panic", help="Activate system-wide maximum defense")
+    
+    lookup_parser = subparsers.add_parser("lookup", help="Enrich IP with Geo/ASN data")
+    lookup_parser.add_argument("ip", help="IP Address to lookup")
 
     args = parser.parse_args()
 
@@ -112,6 +129,8 @@ def main():
         show_logs()
     elif args.command == "panic":
         panic_mode()
+    elif args.command == "lookup":
+        lookup_ip(args.ip)
     else:
         parser.print_help()
 

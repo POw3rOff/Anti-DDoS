@@ -12,6 +12,7 @@ import time
 import os
 from datetime import datetime, timezone
 from collections import deque
+from intelligence.enrichment import GeoIPEnricher
 
 class AlertManager:
     def __init__(self, config=None):
@@ -21,12 +22,20 @@ class AlertManager:
         self.history = deque(maxlen=100)
         self.dedup_window = 60 # seconds
         self.last_alerts = {} # {alert_key: timestamp}
+        self.enricher = GeoIPEnricher()
 
     def process_event(self, event):
         """Processes an event and triggers alerts if it meets severity criteria."""
         severity = event.get("severity", "INFO")
         event_type = event.get("type", event.get("event", "unknown"))
         
+        # Enrich IP Context
+        target_ip = event.get("target_entity")
+        if target_ip and target_ip != "global":
+            enrichment = self.enricher.enrich(target_ip)
+            if enrichment.get("country") != "Unknown":
+                event["context"] = enrichment
+
         # We only alert on MEDIUM, HIGH, CRITICAL or specific event types
         if severity not in ["MEDIUM", "HIGH", "CRITICAL"] and event_type not in ["state_change", "mitigation_directive", "ml_advisory"]:
             return
@@ -78,7 +87,12 @@ class AlertManager:
         elif etype == "ml_advisory":
             return f"ML ANOMALY DETECTED: {target} (Confidence: {event.get('confidence')})"
         
-        return f"CRITICAL EVENT [{etype}] on {target}"
+        return f"CRITICAL EVENT [{etype}] on {target}" + self._format_enrichment(event)
+
+    def _format_enrichment(self, event):
+        ctx = event.get("context", {})
+        if not ctx: return ""
+        return f" [{ctx.get('country', '??')} {ctx.get('asn', '')}]"
 
     def get_recent_alerts(self, limit=5):
         return list(self.history)[-limit:]
