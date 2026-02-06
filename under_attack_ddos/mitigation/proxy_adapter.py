@@ -24,24 +24,24 @@ class ProxyAdapter:
             except Exception as e:
                 logging.error(f"Failed to init proxy config: {e}")
 
-    def block_ip(self, ip_address):
-        """Adds an IP to the Nginx deny list and reloads."""
-        if ip_address in self.banned_ips:
+    def block_ip(self, ip_address, verdict=1):
+        """
+        Adds an IP to the Nginx deny list and reloads.
+        verdict: 1=Block (403), 2=Challenge (429)
+        """
+        # If IP is already banned with same verdict, skip
+        if (ip_address, verdict) in self.banned_ips:
             return
 
-        self.banned_ips.add(ip_address)
+        self.banned_ips.add((ip_address, verdict))
         try:
-            # Append to file (Nginx format: '1.2.3.4 1;') inside the map
-            # Actually, standard Nginx 'deny' is simpler if used inside a block, 
-            # but for map we need 'KEY VALUE;'
-            # Let's assume we are generating the CONTENT of the map or specific deny directives.
-            # Design doc said: map $remote_addr $block_verdict { ... }
-            # So the include file should contain lines like: "1.2.3.4 1;"
+            # Append to file (Nginx format: '1.2.3.4 1;' or '1.2.3.4 2;')
+            # 1 = Block, 2 = Challenge (mapped in nginx config)
             
             with open(self.config_path, 'a') as f:
-                f.write(f"{ip_address} 1;\n")
+                f.write(f"{ip_address} {verdict};\n")
             
-            logging.info(f"PROXY: Added {ip_address} to blocklist.")
+            logging.info(f"PROXY: Added {ip_address} to list with verdict {verdict}.")
             self._reload_service()
 
         except Exception as e:

@@ -3,8 +3,13 @@ import json
 import os
 import time
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi import Request
 from pydantic import BaseModel
+import sys
+# Ensure root path
+sys.path.append(os.path.join(os.path.dirname(__file__), "../.."))
+from layer7.js_challenge import JSChallenge
 from dashboard.backend.config_manager import ConfigManager
 
 router = APIRouter()
@@ -15,6 +20,7 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../../config/thresholds.y
 CAPTURES_DIR = os.path.join(os.path.dirname(__file__), "../../data/captures")
 
 config_manager = ConfigManager(CONFIG_PATH)
+js_challenge = JSChallenge(secret_key="production_secret_key") # Logic instance
 
 class PanicRequest(BaseModel):
     confirm: bool
@@ -96,3 +102,26 @@ async def download_capture(filename: str):
         raise HTTPException(status_code=404, detail="File not found")
         
     return FileResponse(file_path, media_type='application/vnd.tcpdump.pcap', filename=filename)
+
+# --- Phase 26: L7 Challenge Endpoints ---
+
+@router.get("/challenge")
+async def get_challenge(request: Request):
+    """Serves the JS Challenge HTML page."""
+    client_ip = request.client.host
+    html_content = js_challenge.generate_challenge(client_ip)
+    return HTMLResponse(content=html_content, status_code=200)
+
+class ChallengeResponse(BaseModel):
+    token: str
+
+@router.post("/challenge/verify")
+async def verify_challenge(request: Request, response: ChallengeResponse):
+    """Validates the challenge token."""
+    client_ip = request.client.host
+    if js_challenge.validate_token(client_ip, response.token):
+        # In a real setup, we would set a 'Clearance Cookie' or update Nginx Allow List here.
+        # For now, we return success so the JS on the page can reload/proceed.
+        return JSONResponse(content={"status": "verified"}, status_code=200)
+    else:
+        raise HTTPException(status_code=403, detail="Challenge Failed")

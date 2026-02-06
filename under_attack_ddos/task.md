@@ -375,3 +375,33 @@ Notes: Creating config templates and python adapter.
 - [/] Implement ProxyAdapter (mitigation/proxy_adapter.py) <!-- id: 115 -->
 - [ ] Integrate ProxyAdapter into Orchestrator <!-- id: 116 -->
 
+
+[2026-02-06] STATUS UPDATE
+Reference: Phase 26: Deep Proxy Integration
+New Status: PLANNED
+Notes: User requested formal integration of L7 Challenges into Nginx.
+
+- [ ] Backend: Add /challenge endpoint (dashboard/backend/api.py) <!-- id: 118 -->
+- [ ] Nginx: Create challenge.conf template (web_security/) <!-- id: 119 -->
+- [ ] Update ProxyAdapter to support challenge redirection <!-- id: 120 -->
+
+
+[2026-02-06] STATUS UPDATE
+Reference: Phase 26: Deep Proxy Integration
+New Status: IN_PROGRESS
+Notes: Implementing backend endpoints and Nginx challenge template.
+
+- [/] Backend: Add /challenge endpoint (dashboard/backend/api.py) <!-- id: 118 -->
+- [ ] Nginx: Create challenge.conf template (web_security/) <!-- id: 119 -->
+- [ ] Update ProxyAdapter to support challenge redirection <!-- id: 120 -->
+
+
+[2026-02-06] STATUS UPDATE
+Reference: Phase 26: Deep Proxy Integration
+•New Status: COMPLETED
+•Notes: Implemented Backend Challenge endpoints and Nginx redirection template. Verified with test_suite/challenge_integration_test.py.
+
+- [x] Backend: Add /challenge endpoint (dashboard/backend/api.py) <!-- id: 118 -->
+- [x] Nginx: Create challenge.conf template (web_security/) <!-- id: 119 -->
+- [x] Update ProxyAdapter to support challenge redirection <!-- id: 120 -->
+

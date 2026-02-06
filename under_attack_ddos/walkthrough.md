@@ -285,3 +285,24 @@ Implemented 8 advanced defense mechanisms:
 
 Status: **COMPLETED**
 
+
+[2026-02-06] PHASE 26 VERIFICATION RESULTS
+
+## Deep Proxy Integration (L7 Challenges)
+Connected the L7 Hardening Logic (JS Challenge) to the Reverse Proxy flow.
+
+1.  **Backend Support**:
+    -   GET /challenge: Returns HTML challenge (JS calculation).
+    -   POST /challenge/verify: Validates token.
+    -   Integrated into dashboard/backend/api.py.
+2.  **Nginx Template**:
+    -   web_security/challenge_template.conf: Redirects 429 Errors -> \@challenge\ location -> Backend API.
+3.  **Proxy Adapter**:
+    -   Updated mitigation/proxy_adapter.py to support erdict=2 (Challenge).
+
+## Verification
+*   **Test Suite**: 	est_suite/challenge_integration_test.py passed (Mock client verified API flows).
+*   **Behavior**: Nginx is configured to offload suspicious traffic (Verdict 2) to the Python backend for verification, implementing a 'Soft Block'.
+
+Status: **COMPLETED**
+

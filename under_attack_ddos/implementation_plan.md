@@ -629,3 +629,35 @@ Enable the Orchestrator to enforce mitigation rules (IP Blocking) at the Layer 7
     -   Trigger manual alert.
     -   Check if \web_security/dynamic_denylist.conf\ is created/updated.
 
+
+[2026-02-06] PHASE 26 PLAN: Deep Proxy Integration
+
+## Goal
+Connect the L7 Hardening Logic (JS Challenge) directly to the operational Proxy (Nginx). Instead of essentially banning IPs at L7, we will redirect suspicious traffic to a Challenge Page hosted by our backend.
+
+## Proposed Changes
+
+###  Backend
+1.  **dashboard/backend/api.py**:
+    -   Import layer7.js_challenge.
+    -   Expose \GET /challenge\: Serve the challenge HTML (using generate_challenge).
+    -   Expose \POST /challenge/verify\: Validate token and return a clearance cookie.
+
+###  Nginx Configuration
+2.  **web_security/challenge_template.conf**:
+    -   Define a named location \@challenge\.
+    -   \proxy_pass http://localhost:8001/challenge;\.
+    -   Define \error_page 429 = @challenge;\.
+
+###  Mitigation
+3.  **Update mitigation/proxy_adapter.py**:
+    -   Update lock_ip to optionally set the map value to 2 (Challenge) instead of 1 (Block).
+    -   Update locklist_template.conf to handle value '2' -> return 429 (which triggers challenge).
+
+## Verification
+-   **Manual**:
+    -   Start Backend.
+    -   Access \/challenge\ in browser, expect HTML.
+-   **Automated**:
+    -   Unit test challenge_integration_test.py checking API response.
+
