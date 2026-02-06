@@ -146,20 +146,22 @@ class eBPFManager:
 
         try:
             blacklist = self.bpf.get_table("map_blacklist")
-            # Convert IP to bytes
-            ip_bytes = socket.inet_aton(ip_str)
-            # LPM Trie key: struct { u32 prefixlen; u32 ipv4_addr; }
-            # key = blacklist.Key(32, ip_bytes)
-            # value = blacklist.Leaf(1)
-            # blacklist[key] = value
+            # Convert IP to network byte order integer
+            ip_int = struct.unpack("I", socket.inet_aton(ip_str))[0]
+            
+            # LPM Trie key requires prefixlen (32 for single IP)
+            # The BCC LPM Key helper handles the prefixlen + data layout
+            key = blacklist.Key(32, ip_int)
+            blacklist[key] = ctypes.c_uint32(1)
+            
             logging.info(f"IP {ip_str} added to eBPF blacklist.")
         except Exception as e:
             logging.error(f"Failed to block IP: {e}")
 
     def _mock_stats(self):
         return {
-            "TCP": {"packets": 12345, "bytes": 67890},
-            "UDP": {"packets": 543, "bytes": 1200},
+            "TCP": {"packets": 12345, "bytes": 6789000},
+            "UDP": {"packets": 543, "bytes": 12000},
             "ICMP": {"packets": 12, "bytes": 640},
             "OTHER": {"packets": 0, "bytes": 0}
         }

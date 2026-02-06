@@ -141,6 +141,10 @@ class MitigationExecutor:
             logging.info(f"Blocking IP: {ip} (Score: {source.get('score')})")
             self._run_cmd(["ipset", "add", self.ipset_name, ip, "-!", "timeout", "300"]) # 5 min default
 
+            # eBPF Integration: Also block in XDP NIC level
+            loader_path = os.path.join(os.path.dirname(__file__), "../ebpf/loader.py")
+            self._run_cmd([sys.executable, loader_path, "--block", ip])
+
         # 2. Protocol Hardening based on state
         if state == "UNDER_ATTACK":
             self._enforce_aggressive_hardening()
