@@ -80,8 +80,15 @@ class ConfigLoader:
             return DEFAULT_CONFIG
 
         try:
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 user_config = yaml.safe_load(f) or {}
+
+            # Override auth_token from environment
+            auth_token = os.environ.get("UAD_AUTH_TOKEN")
+            if auth_token:
+                user_config["auth_token"] = auth_token
+                logging.info("Auth token overridden by environment variable UAD_AUTH_TOKEN")
+
             # Minimal merge logic
             return user_config
         except Exception as e:

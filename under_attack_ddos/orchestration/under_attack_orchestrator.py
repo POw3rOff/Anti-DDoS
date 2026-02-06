@@ -20,12 +20,11 @@ import subprocess
 import shlex
 from collections import defaultdict
 from datetime import datetime, timezone
-from intelligence.intelligence_engine import IntelligenceEngine
-from alerts.alert_manager import AlertManager
 
 # Ensure project root is in path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from forensics.pcap_recorder import PcapRecorder
+from intelligence.intelligence_engine import IntelligenceEngine
+from alerts.alert_manager import AlertManager
 from forensics.pcap_recorder import PcapRecorder
 from ebpf.xdp_loader import XDPLoader
 from mitigation.proxy_adapter import ProxyAdapter
@@ -34,7 +33,6 @@ from config.consts import SystemState, STATE_FILE
 # Third-party imports
 try:
     import yaml
-    from intelligence.intelligence_engine import IntelligenceEngine
 except ImportError as e:
     print(f"CRITICAL: Missing required dependencies: {e}", file=sys.stderr)
     print("Please install: pip install pyyaml", file=sys.stderr)
@@ -81,8 +79,15 @@ class ConfigLoader:
             return DEFAULT_CONFIG
 
         try:
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 user_config = yaml.safe_load(f) or {}
+
+            # Override auth_token from environment
+            auth_token = os.environ.get("UAD_AUTH_TOKEN")
+            if auth_token:
+                user_config["auth_token"] = auth_token
+                logging.info("Auth token overridden by environment variable UAD_AUTH_TOKEN")
+
             return user_config
         except Exception as e:
             logging.error(f"Failed to parse config: {e}")
