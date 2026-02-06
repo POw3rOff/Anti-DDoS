@@ -8,10 +8,7 @@ StartLimitIntervalSec=0
 User=root
 Group=uad-core
 WorkingDirectory=/opt/uad
-ExecStart=/opt/uad/.venv/bin/python3 -u layer3/ip_flood_analyzer.py --config config/thresholds.yaml --ebpf --json
-# Output logging is handled by journald, we can pipe to events.jsonl via shell if needed, 
-# but better to have it log to a file directly or use a pipe.
-# For simplicity in this template, we assume it logs to stderr which systemd captures.
+ExecStart=/bin/sh -c '/opt/uad/.venv/bin/python3 -u layer3/ip_flood_analyzer.py --config config/thresholds.yaml --ebpf --json >> /opt/uad/runtime/events.jsonl'
 
 # Hardening (Limited for root, but still useful)
 ProtectSystem=full
