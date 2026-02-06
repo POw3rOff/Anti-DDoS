@@ -476,3 +476,78 @@ Provide a real-time, visual 'War Room' dashboard for monitoring attacks, viewing
 - Access http://localhost:8000
 - Verify data flows from untime/global_state.json to the UI.
 
+
+[2026-02-06] PHASE 22 PLAN: eBPF/XDP High Performance Sensors
+
+## Goal
+Implement the foundation for high-performance packet filtering using eBPF/XDP. While the current environment is Windows, we will develop the Linux-compatible C code and a Python loader that supports a **Simulation Mode** for testing/validation on non-Linux systems.
+
+## Proposed Changes
+
+### 1. Kernel Space (C Code)
+- **[NEW] [ebpf/xdp_filter.c](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/ebpf/xdp_filter.c)**:
+    - Defines an \xdp_md\ context.
+    - Defines a BPF Map (\lacklist\) for source IPs.
+    - Drops packets if source IP is in the map.
+    - Counts dropped packets.
+
+### 2. User Space (Python Loader)
+- **[NEW] [ebpf/xdp_loader.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/ebpf/xdp_loader.py)**:
+    - Uses \cc\ (BPF Compiler Collection) to load the C program.
+    - Attaches XDP to a network interface.
+    - Provides APIs to \dd_banned_ip(ip)\ and \emove_banned_ip(ip)\.
+    - **Simulation**: If \cc\ is missing (Windows), it loads a \MockBPF\ class that mimics the map behavior in memory.
+
+### 3. Orchestration Integration
+- **[MODIFY] [runtime/orchestrator.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/runtime/orchestrator.py)**:
+    - Initialize \XDPLoader\ if \ebpf_support: true\ in config.
+    - Push blocked IPs to the XDP map when \mitigation_executor\ bans an IP.
+
+## Verification Plan
+
+### Automated Test
+- **[NEW] [ebpf_simulation_test.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/test_suite/ebpf_simulation_test.py)**:
+    - Initialize \XDPLoader\ (will default to mock on Windows).
+    - Call \dd_banned_ip('1.2.3.4')\.
+    - Assert that '1.2.3.4' is in the mock map.
+    - Assert that \get_stats()\ returns simulated drop counters.
+
+### Manual Verification
+1.  **Run Loader**: \python ebpf/xdp_loader.py --interface eth0 --simulate\
+2.  **Verify Output**: Should see 'Running in SIMULATION mode' and fake stats logging.
+
+
+[2026-02-06] PHASE 23 PLAN: Discord Integration
+
+## Goal
+Integrate the Alert Manager with Discord to send real-time notifications about system attacks, state changes, and mitigation actions via Webhooks.
+
+## Proposed Changes
+
+### 1. Alert Manager Update
+- **[MODIFY] [alerts/alert_manager.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/alerts/alert_manager.py)**:
+    - Add \discord_webhook\ to the configuration init.
+    - Implement \_send_discord_alert(event, formatted_msg)\ method.
+    - Use \equests\ (or \urllib\ to avoid new deps if preferred, but \equests\ is standard) to POST JSON payloads.
+    - Format payloads with rich embeds (Color coded by severity: Red for Critical, Yellow for Warning).
+
+### 2. Configuration
+- **[MODIFY] [config/thresholds.yaml](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/config/thresholds.yaml)**:
+    - Add \discord_webhook_url\ field (default empty).
+
+### 3. Testing Tool
+- **[NEW] [test_suite/manual_discord_test.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/test_suite/manual_discord_test.py)**:
+    - A script that takes a webhook URL as an argument and sends a test 'UNDER_ATTACK' alert to verify connectivity and formatting.
+
+## Verification Plan
+
+### Automated Test
+- **[NEW] [test_suite/alert_manager_test.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/test_suite/alert_manager_test.py)**:
+    - Mock \equests.post\.
+    - Trigger an alert.
+    - Verify \equests.post\ was called with the correct Discord JSON structure.
+
+### Manual Verification
+1.  **User Action**: Run \python test_suite/manual_discord_test.py --webhook <URL>\.
+2.  **Expected Result**: User sees a formatted alert appear in their Discord channel.
+

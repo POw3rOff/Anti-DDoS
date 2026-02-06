@@ -25,3 +25,7 @@ layer4:
 layer7:
   requests_per_minute:
     global_baseline: 5000
+
+# Alerting
+discord_webhook_url: ''
+

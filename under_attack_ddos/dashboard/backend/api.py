@@ -63,3 +63,36 @@ async def trigger_panic(req: PanicRequest):
         return {"message": "Panic signal sent successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/forensics/files")
+async def list_captures():
+    """Lists available PCAP captures."""
+    if not os.path.exists(CAPTURES_DIR):
+        return []
+    
+    files = []
+    try:
+        for f in os.listdir(CAPTURES_DIR):
+            if f.endswith(".pcap"):
+                path = os.path.join(CAPTURES_DIR, f)
+                size = os.path.getsize(path) / 1024 / 1024 # MB
+                files.append({
+                    "filename": f,
+                    "size_mb": round(size, 2),
+                    "created": time.ctime(os.path.getctime(path))
+                })
+        return sorted(files, key=lambda x: x["created"], reverse=True)
+    except Exception as e:
+        return []
+
+@router.get("/forensics/download/{filename}")
+async def download_capture(filename: str):
+    """Downloads a specific PCAP file."""
+    if ".." in filename or "/" in filename: # Basic traversal check
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    file_path = os.path.join(CAPTURES_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    return FileResponse(file_path, media_type='application/vnd.tcpdump.pcap', filename=filename)

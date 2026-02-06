@@ -22,3 +22,5 @@
 {"timestamp": "2026-02-06T03:32:24.657680+00:00", "type": "mitigation_directive", "action": "block_ip", "target": "1.2.3.4", "params": {"ttl": 300}, "justification": "High risk score (80.0) on layers ['layer3']"}
 {"timestamp": "2026-02-06T03:32:57.631046+00:00", "type": "state_change", "state": "ESCALATED", "score": 100.0, "confidence": "HIGH"}
 {"timestamp": "2026-02-06T03:32:58.648499+00:00", "type": "mitigation_directive", "action": "block_ip", "target": "1.2.3.4", "params": {"ttl": 300}, "justification": "High risk score (80.0) on layers ['layer3']"}
+{"type": "state_change", "severity": "CRITICAL", "target_entity": "TestNode", "state": "UNDER_ATTACK"}
+{"type": "state_change", "severity": "CRITICAL", "target_entity": "Global System", "state": "UNDER_ATTACK", "score": 95, "context": {"country": "US", "asn": "AS15169"}}

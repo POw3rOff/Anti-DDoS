@@ -13,6 +13,10 @@ import os
 from datetime import datetime, timezone
 from collections import deque
 from intelligence.enrichment import GeoIPEnricher
+try:
+    import requests
+except ImportError:
+    requests = None
 
 class AlertManager:
     def __init__(self, config=None):
@@ -23,6 +27,7 @@ class AlertManager:
         self.dedup_window = 60 # seconds
         self.last_alerts = {} # {alert_key: timestamp}
         self.enricher = GeoIPEnricher()
+        self.discord_url = self.config.get("discord_webhook_url", "")
 
     def process_event(self, event):
         """Processes an event and triggers alerts if it meets severity criteria."""
@@ -65,9 +70,9 @@ class AlertManager:
         # 2. Log to system logs
         logging.warning(f"ALERT TRIGGERED: {alert_msg}")
 
-        # 3. Mock Slack/Webhook (Future expansion)
-        if self.config.get("slack_webhook"):
-            pass
+        # 3. Send to Discord
+        if self.discord_url and requests:
+            self._send_discord_alert(event, alert_msg)
 
         self.history.append({
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -96,3 +101,34 @@ class AlertManager:
 
     def get_recent_alerts(self, limit=5):
         return list(self.history)[-limit:]
+
+    def _send_discord_alert(self, event, formatted_msg):
+        """Sends a rich embed to Discord."""
+        try:
+            severity = event.get("severity", "INFO")
+            color = 0x00ff41 # Green (Info)
+            
+            if severity == "MEDIUM":
+                color = 0xffaa00 # Orange
+            elif severity in ["HIGH", "CRITICAL", "ESCALATED", "UNDER_ATTACK"]:
+                color = 0xff0000 # Red
+            
+            payload = {
+                "username": "UAD SENTINEL",
+                "avatar_url": "https://i.imgur.com/4M34hi2.png",
+                "embeds": [{
+                    "title": f"🚨 {severity} ALERT",
+                    "description": formatted_msg,
+                    "color": color,
+                    "fields": [
+                        {"name": "Target", "value": event.get("target_entity", "N/A"), "inline": True},
+                        {"name": "Type", "value": event.get("type", "Unknown"), "inline": True},
+                        {"name": "Timestamp", "value": datetime.now().strftime("%H:%M:%S UTC"), "inline": True}
+                    ],
+                    "footer": {"text": "Under Attack DDoS Protection System"}
+                }]
+            }
+            
+            requests.post(self.discord_url, json=payload, timeout=2)
+        except Exception as e:
+            logging.error(f"Discord Alert Failed: {e}")

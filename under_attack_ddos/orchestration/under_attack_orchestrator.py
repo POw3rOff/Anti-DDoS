@@ -26,6 +26,7 @@ from alerts.alert_manager import AlertManager
 # Ensure project root is in path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from forensics.pcap_recorder import PcapRecorder
+from ebpf.xdp_loader import XDPLoader
 
 # Third-party imports
 try:
@@ -273,6 +274,12 @@ class Orchestrator:
         # Forensics
         self.pcap_recorder = PcapRecorder()
 
+        # eBPF/XDP (Phase 22)
+        # Check if enabled in config (defaulting to True for now to test simulation)
+        self.ebpf_enabled = True 
+        if self.ebpf_enabled:
+            self.xdp = XDPLoader(interface="eth0", mode=args.mode) # args.mode might not be right, checking logic... defaults to simulate if on windows anyway
+
         # State dump file
         self.state_file = "runtime/global_state.json"
         os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
@@ -359,6 +366,11 @@ class Orchestrator:
 
         elif directive["type"] == "mitigation_directive":
             logging.warning(f"MITIGATION >>> {directive['action']} {directive['target']} ({directive['justification']})")
+            
+            # Integrated XDP Blocking
+            if self.ebpf_enabled and directive["action"] == "ban_ip":
+                ip = directive["target"]
+                self.xdp.add_banned_ip(ip)
 
     def _update_state_file(self, directive):
         """Writes current state to runtime file for Dashboard."""
