@@ -37,9 +37,10 @@ DEFAULT_CONFIG = {
         "dry_run_default": True,
         "auto_escalate": True,
         "states": {
-            "normal": {"risk_max": 29},
-            "defensive": {"risk_min": 30, "risk_max": 59},
-            "high_alert": {"risk_min": 60}
+            "NORMAL": {"risk_max": 29},
+            "MONITOR": {"risk_min": 30, "risk_max": 59},
+            "UNDER_ATTACK": {"risk_min": 60, "risk_max": 89},
+            "ESCALATED": {"risk_min": 90}
         },
         "alerts": {
             "enabled": True,
@@ -57,11 +58,15 @@ class ConfigLoader:
     @staticmethod
     def load(path):
         if not os.path.exists(path):
+            logging.warning(f"Config file not found: {path}. Using defaults.")
             return DEFAULT_CONFIG
         try:
             with open(path, 'r') as f:
-                return yaml.safe_load(f) or {}
-        except Exception:
+                loaded = yaml.safe_load(f)
+                if not loaded: return DEFAULT_CONFIG
+                return loaded
+        except Exception as e:
+            logging.error(f"Failed to parse config: {e}. Using defaults.")
             return DEFAULT_CONFIG
 
 class AlertManager:
@@ -149,8 +154,10 @@ class ControllerEngine:
 
     def _map_risk_to_state(self, score):
         states = self.config["states"]
-        if score >= states["high_alert"]["risk_min"]: return "HIGH_ALERT"
-        if score >= states["defensive"]["risk_min"]: return "DEFENSIVE"
+        # Prioritize highest risk first
+        if score >= states.get("ESCALATED", {}).get("risk_min", 90): return "ESCALATED"
+        if score >= states.get("UNDER_ATTACK", {}).get("risk_min", 60): return "UNDER_ATTACK"
+        if score >= states.get("MONITOR", {}).get("risk_min", 30): return "MONITOR"
         return "NORMAL"
 
     def _transition(self, new_state, context):
@@ -169,7 +176,7 @@ class ControllerEngine:
         self._execute_posture(new_state)
 
     def _is_downgrade(self, new_state):
-        ranks = {"NORMAL": 0, "DEFENSIVE": 1, "HIGH_ALERT": 2}
+        ranks = {"NORMAL": 0, "MONITOR": 1, "UNDER_ATTACK": 2, "ESCALATED": 3}
         return ranks.get(new_state, 0) < ranks.get(self.current_state, 0)
 
     def _execute_posture(self, state):
