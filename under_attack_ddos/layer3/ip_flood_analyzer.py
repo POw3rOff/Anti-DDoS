@@ -143,15 +143,35 @@ class IPFloodAnalyzer:
         if self.args.mode == "under_attack":
             window_size = 1.0 # Aggressive sampling
 
-        logging.info(f"Starting capture loop. Window size: {window_size}s")
+        logging.info(f"Starting {'eBPF ' if self.args.ebpf else ''}capture loop. Window size: {window_size}s")
 
         try:
             while self.running:
                 start_loop = time.time()
 
-                # Sniff packets for 'window_size' seconds
-                # store=0 to avoid memory leak
-                sniff(prn=self.packet_callback, store=0, timeout=window_size)
+                if self.args.ebpf:
+                    # 1. Path to loader (assuming same repo structure)
+                    loader_path = os.path.join(os.path.dirname(__file__), "../ebpf/loader.py")
+                    cmd = [sys.executable, loader_path, "--stats", "--json"]
+                    if self.args.dry_run: cmd.append("--dry-run")
+                    
+                    try:
+                        import subprocess
+                        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                        ebpf_stats = json.loads(result.stdout)
+                        # ebpf_stats format: {"1.2.3.4": {"packets": 100, "bytes": 1000}, ...}
+                        for ip, stats in ebpf_stats.items():
+                            if isinstance(stats, dict) and "packets" in stats:
+                                self.packet_counts[ip] = stats["packets"]
+                        
+                        time.sleep(window_size) # Wait for next window
+                    except Exception as e:
+                        logging.error(f"Failed to fetch eBPF stats: {e}")
+                        time.sleep(window_size)
+                else:
+                    # Sniff packets for 'window_size' seconds
+                    # store=0 to avoid memory leak
+                    sniff(prn=self.packet_callback, store=0, timeout=window_size)
 
                 # Analyze
                 duration = time.time() - start_loop
@@ -188,6 +208,7 @@ def main():
     parser.add_argument("--daemon", action="store_true", help="Run as background service")
     parser.add_argument("--once", action="store_true", help="Run single pass and exit")
     parser.add_argument("--json", action="store_true", help="Output JSON events to STDOUT")
+    parser.add_argument("--ebpf", action="store_true", help="Use eBPF sensors for metrics")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Log verbosity")
 
     args = parser.parse_args()
