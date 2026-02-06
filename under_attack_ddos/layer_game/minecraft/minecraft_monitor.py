@@ -40,6 +40,13 @@ class MinecraftMonitor(GameProtocolParser):
         self.status_ping_counts = defaultdict(int)
         self.large_packet_counts = defaultdict(int)
         
+        # State Tracking: {src_ip: last_state_timestamp}
+        # We track when a Handshake (0x00) is sent. 
+        # If no Login Start (0x00 in Login State) follows within X seconds, it's a zombie.
+        self.handshake_states = defaultdict(float)
+        self.zombie_threshold = 2.0 # seconds
+        self.zombie_counts = defaultdict(int)
+        
         # Sliding Windows (History of PPS)
         self.pps_history = defaultdict(lambda: {"handshake": [], "status": []})
         self.window_size = 5 # 5 intervals of 5 seconds = 25s window
@@ -73,7 +80,14 @@ class MinecraftMonitor(GameProtocolParser):
                         if len(payload) < 10:
                             self.status_ping_counts[src_ip] += 1
                         else:
+                            # Handshake Detected
                             self.handshake_counts[src_ip] += 1
+                            self.handshake_states[src_ip] = time.time()
+                    
+                    # Check for Login Start (ID 0x00) in Login State
+                    # This is tricky without full state machine, but usually follows Handshake if state=2
+                    # For hardening, we assume if we see ANOTHER Handshake from same IP without closure, it's suspicious
+                    # Or we check for "Zombie" sweep in analyze()
 
     def analyze(self):
         """Analyzes behavior windows using sliding averages."""
@@ -128,11 +142,27 @@ class MinecraftMonitor(GameProtocolParser):
             # Housekeeping for inactive IPs
             if h_pps == 0 and s_pps == 0 and sum(hist["handshake"]) == 0:
                 del self.pps_history[ip]
+            
+            # 4. Zombie Detection (State Tracking)
+            # If we saw a handshake > 2s ago and no further valid traffic (simplified)
+            # In a real proxy, we'd track per-socket. Here per-IP is "good enough" for flood/zombie
+            if ip in self.handshake_states:
+                if now - self.handshake_states[ip] > self.zombie_threshold:
+                    # Mark as zombie
+                    self.zombie_counts[ip] += 1
+                    del self.handshake_states[ip] # Reset
+                    
+            if self.zombie_counts[ip] > 5:
+                 self.emit_event("mc_zombie_connection", ip, "MEDIUM", {
+                    "count": self.zombie_counts[ip],
+                    "details": "Client sent handshake but stuck in limbo"
+                })
 
         # Pruning
         self.handshake_counts.clear()
         self.status_ping_counts.clear()
         self.large_packet_counts.clear()
+        self.zombie_counts.clear()
         self.last_reset = now
 
     def run(self):
