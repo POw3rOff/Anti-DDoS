@@ -41,54 +41,42 @@ class IntelligenceEngine:
         self.last_attack_time = 0
         self.grs_score = 0.0
 
-    def calculate_grs(self, source_events, active_campaigns):
+    def calculate_grs(self, source_events, active_campaigns, ml_advisories=None):
         """
-        Calculates Global Risk Score based on event density and campaigns.
+        Calculates Global Risk Score based on event density, campaigns, and ML.
         
         :param source_events: Dict {ip: [events...]}
         :param active_campaigns: List of campaign objects
+        :param ml_advisories: List of ML advisory events
         :return: (grs, active_sources, active_layers)
         """
         total_score = 0.0
         active_sources = []
         global_active_layers = set()
 
+        # 1. Base Layer Processing
         for src, events in source_events.items():
             if not events: continue
-
             src_score = 0.0
             layers_seen = set()
-
             for e in events:
                 layer = e.get("layer", "unknown")
                 severity = e.get("severity", "LOW")
-
-                # Base score mapping
                 base_val = 10
                 if severity == "MEDIUM": base_val = 30
                 elif severity == "HIGH": base_val = 60
                 elif severity == "CRITICAL": base_val = 90
-
                 weight = self.weights.get(layer, 0.1)
                 src_score += (base_val * weight)
                 layers_seen.add(layer)
                 global_active_layers.add(layer)
-
-            # Cross-layer multiplier for this specific source
-            if len(layers_seen) > 1:
-                src_score *= self.cross_layer_multiplier
-
+            if len(layers_seen) > 1: src_score *= self.cross_layer_multiplier
             src_score = min(src_score, 100.0)
             total_score = max(total_score, src_score)
-
             if src_score > 30:
-                active_sources.append({
-                    "ip": src, 
-                    "score": round(src_score, 1),
-                    "layers": list(layers_seen)
-                })
+                active_sources.append({"ip": src, "score": round(src_score, 1), "layers": list(layers_seen)})
 
-        # Campaign alerts boost total score significantly
+        # 2. Campaign alerts boost total score significantly
         if active_campaigns:
             for camp in active_campaigns:
                 global_active_layers.add("correlation")
@@ -96,6 +84,23 @@ class IntelligenceEngine:
                     total_score = max(total_score, 95.0)
                 else:
                     total_score = max(total_score, 80.0)
+
+        # 3. ML Advisories (Anomaly Detection Integration)
+        if ml_advisories:
+            for adv in ml_advisories:
+                global_active_layers.add("ml_intelligence")
+                # ML increases total score based on confidence
+                conf = adv.get("confidence", 0.0)
+                ml_boost = 20 * conf
+                total_score = min(total_score + ml_boost, 100.0)
+                
+                # Also treat the target of ML advisory as an active source if high confidence
+                if conf > 0.7:
+                    active_sources.append({
+                        "ip": adv.get("target_entity"),
+                        "score": 75.0, # High suspicion
+                        "layers": ["ml_intelligence"]
+                    })
 
         self.grs_score = round(total_score, 1)
         return self.grs_score, active_sources, global_active_layers

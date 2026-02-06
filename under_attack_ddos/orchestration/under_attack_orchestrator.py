@@ -131,8 +131,10 @@ class CorrelationEngine:
 
         # In-memory state: {source_ip: [events...]}
         self.event_buffer = defaultdict(list)
-        # Campaign State: [campaign_alerts...]
+        # Campaign State: [events...]
         self.active_campaigns = []
+        # ML Advisories: [events...]
+        self.ml_advisories = []
 
         self.lock = threading.Lock()
 
@@ -142,10 +144,17 @@ class CorrelationEngine:
             now = time.time()
             event["_recv_time"] = now
 
-            # Special handling for Campaign Alerts
-            if event.get("type") == "campaign_alert":
+            t = event.get("type", event.get("event"))
+
+            # Special handling for signals
+            if t == "campaign_alert":
                 self.active_campaigns.append(event)
                 self.active_campaigns = [c for c in self.active_campaigns if now - c["_recv_time"] <= 300]
+                return
+            
+            if t == "ml_advisory" or event.get("source") == "ml_intelligence":
+                self.ml_advisories.append(event)
+                self.ml_advisories = [m for m in self.ml_advisories if now - m["_recv_time"] <= 300]
                 return
 
             src = event.get("source_entity", "unknown")
@@ -156,13 +165,13 @@ class CorrelationEngine:
                                       if now - e["_recv_time"] <= self.window_size]
 
     def get_snapshot(self):
-        """Returns a snapshot of current events and campaigns for intelligence analysis."""
+        """Returns a snapshot for intelligence analysis."""
         with self.lock:
             # Clear empty buffers
             to_remove = [k for k, v in self.event_buffer.items() if not v]
             for k in to_remove: del self.event_buffer[k]
             
-            return dict(self.event_buffer), list(self.active_campaigns)
+            return dict(self.event_buffer), list(self.active_campaigns), list(self.ml_advisories)
 
 class Orchestrator:
     def __init__(self, args, config):
@@ -197,8 +206,8 @@ class Orchestrator:
                     pass
 
                 # 2. Extract Intelligence
-                source_events, campaigns = self.correlation_engine.get_snapshot()
-                grs, active_sources, layers = self.intelligence_engine.calculate_grs(source_events, campaigns)
+                source_events, campaigns, ml_adv = self.correlation_engine.get_snapshot()
+                grs, active_sources, layers = self.intelligence_engine.calculate_grs(source_events, campaigns, ml_adv)
                 
                 # 3. Check for State Change
                 new_state = self.intelligence_engine.determine_state(grs)
@@ -244,7 +253,7 @@ class Orchestrator:
                     "mode": directive["state"],
                     "grs_score": directive["score"],
                     "last_update": directive["timestamp"],
-                    "campaigns": [] # Future: track active campaign names
+                    "campaigns": self.correlation_engine.active_campaigns # Pass raw objects or names
                 }
                 json.dump(state_dump, f)
         except Exception as e:

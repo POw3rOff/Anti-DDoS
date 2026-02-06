@@ -47,6 +47,6 @@ fi
 echo "[*] To install services, run:"
 echo "    sudo cp /opt/uad/deployment/*.service /etc/systemd/system/"
 echo "    sudo systemctl daemon-reload"
-echo "    sudo systemctl enable uad-orchestrator uad-l3-analyzer uad-l4-analyzer uad-executor"
+echo "    sudo systemctl enable uad-orchestrator uad-l3-analyzer uad-l4-analyzer uad-executor uad-exporter"
 
 echo "[+] Setup Complete. Deployment ready."
