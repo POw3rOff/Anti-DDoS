@@ -446,3 +446,33 @@ Ensure that detection events from ALL layers (L3, L4, Game) include Geographical
     - Generate traffic (or mock packet).
     - Check logs for [XX] country code.
 
+
+# Phase 19: War Room Web UI
+
+## Goal
+Provide a real-time, visual 'War Room' dashboard for monitoring attacks, viewing the world map of threats (GeoIP), and controlling the system.
+
+## Proposed Architecture
+- **Backend**: FastAPI (Python) serving a REST API and WebSockets for real-time data.
+- **Frontend**: Lightweight Single-Page Application (SPA) using vanilla JS + Chart.js/Leaflet.js (served statically by FastAPI).
+- **Communication**: Polling/WebSocket from Frontend -> Backend -> System State Files.
+
+## Changes
+
+### 1. Dashboard Backend (dashboard/backend/)
+- **[NEW] [dashboard/backend/main.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/dashboard/backend/main.py)**: FastAPI entry point.
+- **[NEW] [dashboard/backend/api.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/dashboard/backend/api.py)**: Endpoints for status, logs, and panic mode.
+
+### 2. Dashboard Frontend (dashboard/frontend/)
+- **[NEW] [dashboard/frontend/index.html](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/dashboard/frontend/index.html)**: Main UI layout (Dark Mode).
+- **[NEW] [dashboard/frontend/static/js/app.js](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/dashboard/frontend/static/js/app.js)**: Dashboard logic (fetching data, rendering charts).
+- **[NEW] [dashboard/frontend/static/css/style.css](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/dashboard/frontend/static/css/style.css)**: Cyber/Hacker visual theme.
+
+### 3. Integration
+- **[NEW] [run_dashboard.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/run_dashboard.py)**: Launcher script.
+
+## Verification
+- Start dashboard: python run_dashboard.py
+- Access http://localhost:8000
+- Verify data flows from untime/global_state.json to the UI.
+

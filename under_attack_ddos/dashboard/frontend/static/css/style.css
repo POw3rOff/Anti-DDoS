@@ -1,0 +1,133 @@
+
+:root {
+    --bg-color: #0d0d0d;
+    --card-bg: #1a1a1a;
+    --text-color: #e0e0e0;
+    --accent-green: #00ff41;
+    --accent-red: #ff3333;
+    --accent-blue: #0088ff;
+    --border-color: #333;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: 'JetBrains Mono', monospace;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+}
+
+.logo {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: var(--accent-green);
+    text-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.status-indicator {
+    padding: 5px 10px;
+    border-radius: 4px;
+    background: #333;
+    font-size: 0.8rem;
+}
+
+.status-indicator.online {
+    background: var(--accent-green);
+    color: #000;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    grid-template-rows: auto auto;
+    gap: 20px;
+}
+
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    padding: 20px;
+    border-radius: 4px;
+}
+
+h2 {
+    margin-top: 0;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 10px;
+    font-size: 1rem;
+    color: #888;
+}
+
+.big-stat {
+    font-size: 3rem;
+    font-weight: bold;
+    margin: 20px 0;
+    text-align: center;
+}
+
+.mode-normal { color: var(--accent-green); }
+.mode-monitor { color: var(--accent-blue); }
+.mode-elevated { color: orange; }
+.mode-escalated { color: var(--accent-red); animation: pulse 1s infinite; }
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.btn {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    margin-top: 20px;
+    transition: 0.2s;
+}
+
+.btn-danger {
+    background: #330000;
+    color: var(--accent-red);
+    border: 1px solid var(--accent-red);
+}
+
+.btn-danger:hover {
+    background: var(--accent-red);
+    color: #fff;
+}
+
+.map-card {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    min-height: 400px;
+}
+
+.map-placeholder {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    color: #333;
+}
+
+canvas {
+    width: 100%;
+    height: 200px;
+}

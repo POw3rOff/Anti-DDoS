@@ -1,0 +1,58 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UAD War Room</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">🛡️ UNDER ATTACK DEFENSE</div>
+            <div id="connection-status" class="status-indicator">OFFLINE</div>
+        </header>
+
+        <div class="grid">
+            <!-- Global Status Panel -->
+            <div class="card status-card" id="status-panel">
+                <h2>DEFENSE MATRIX</h2>
+                <div class="big-stat" id="mode-display">LOADING...</div>
+                <div class="stat-row">
+                    <span>Global Risk Score:</span>
+                    <span id="grs-display">0</span>
+                </div>
+                <button id="panic-btn" class="btn btn-danger">⚠️ ACTIVATE PANIC MODE</button>
+            </div>
+
+            <!-- Attack Map (Placeholder for now) -->
+            <div class="card map-card">
+                <h2>LIVE THREAT MAP</h2>
+                <div id="map-container">
+                    <div class="map-placeholder">[ GEOIP ATTACK ORIGINS ]</div>
+                </div>
+            </div>
+
+            <!-- Live Stats -->
+            <div class="card stats-card">
+                <h2>THROUGHPUT (PPS)</h2>
+                <canvas id="trafficChart"></canvas>
+            </div>
+
+            <!-- Active Campaigns -->
+            <div class="card campaigns-card">
+                <h2>ACTIVE CAMPAIGNS</h2>
+                <ul id="campaign-list">
+                    <li>No active threats detected.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
