@@ -7,7 +7,7 @@
 This project is organized into modular components, each responsible for specific layers of defense or system management:
 
 - **`orchestration/`**: The core of the system. Contains `under_attack_orchestrator.py`, which manages the system state (NORMAL, MONITOR, UNDER_ATTACK, ESCALATED) based on a Global Risk Score (GRS).
-- **`layer3/`**: Network layer defenses. Includes `ip_flood_analyzer.py` and bandwidth monitoring to handle volumetric attacks.
+- **`layer3/`**: Network layer defenses. Includes `ip_flood_analyzer.py`, `l3_spoofing_detector.py` (for Bogons/Martians), and bandwidth monitoring to handle volumetric attacks.
 - **`layer4/`**: Transport layer defenses. Focuses on UDP flood monitoring (`l4_udp_flood_monitor.py`) and SYN flood analysis.
 - **`layer7/`**: Application layer defenses. Analyzes request rates (`l7_request_rate_analyzer.py`) to mitigate HTTP/application floods.
 - **`layer_game/`**: Game-aware defense layer. Includes specific protocol parsers and monitors for games (e.g., Metin2) and a generic game correlation engine.
@@ -52,6 +52,9 @@ Detectors can be run independently or piped into the orchestrator:
 ```bash
 # Example: Running the L3 Flood Analyzer
 python3 under_attack_ddos/layer3/ip_flood_analyzer.py
+
+# Example: Running the L3 Spoofing Detector
+python3 under_attack_ddos/layer3/l3_spoofing_detector.py
 ```
 
 ## Configuration
