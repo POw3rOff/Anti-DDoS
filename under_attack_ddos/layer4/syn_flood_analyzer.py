@@ -71,6 +71,7 @@ class SynFloodAnalyzer:
         self.config = config
         self.running = True
         self.syn_counts = defaultdict(int)
+        self.tcp_signatures = defaultdict(lambda: {"windows": set(), "ttls": set()})
 
         # Load thresholds
         l4_conf = self.config.get("layer4", {}).get("syn_flood", {})
@@ -95,9 +96,15 @@ class SynFloodAnalyzer:
         """Called for each captured packet. BPF ensures we only get TCP SYNs."""
         # Optimization: Use getlayer() to avoid double traversal (contains + getitem)
         # Benchmark shows ~25% speedup vs 'if IP in packet'
-        ip_layer = packet.getlayer(IP)
-        if ip_layer:
-            self.syn_counts[ip_layer.src] += 1
+        ip = packet.getlayer(IP)
+        tcp = packet.getlayer(TCP)
+        if ip and tcp:
+            src = ip.src
+            self.syn_counts[src] += 1
+            
+            # TCP Signature Tracking
+            self.tcp_signatures[src]["windows"].add(tcp.window)
+            self.tcp_signatures[src]["ttls"].add(ip.ttl)
 
     def analyze_window(self, duration):
         """Analyzes the accumulated SYN counts."""
@@ -142,6 +149,16 @@ class SynFloodAnalyzer:
                     country_tag = f" [{enrichment.get('country')} {enrichment.get('asn')}]"
                 else:
                     country_tag = ""
+                
+                # Signature Check
+                bad_windows = l4_conf.get("bad_window_sizes", [])
+                src_windows = self.tcp_signatures.get(ip, {}).get("windows", set())
+                for w in src_windows:
+                    if w in bad_windows:
+                        event["severity"] = "CRITICAL"
+                        event["confidence"] = "HIGH"
+                        event["signature_alert"] = f"Detected Bad TCP Window: {w}"
+                        logging.warning(f"SIGNATURE ALERT: IP {ip} used known botnet Window Size {w}")
 
                 if self.args.dry_run:
                     event["status"] = "simulated"
@@ -163,6 +180,7 @@ class SynFloodAnalyzer:
 
         # Reset counters
         self.syn_counts.clear()
+        self.tcp_signatures.clear()
         
         # Hot Reload Config (Check every 5 seconds)
         if self.config_path and (time.time() - self.last_config_check) > 5:

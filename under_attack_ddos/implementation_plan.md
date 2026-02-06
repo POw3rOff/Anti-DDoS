@@ -551,3 +551,48 @@ Integrate the Alert Manager with Discord to send real-time notifications about s
 1.  **User Action**: Run \python test_suite/manual_discord_test.py --webhook <URL>\.
 2.  **Expected Result**: User sees a formatted alert appear in their Discord channel.
 
+
+[2026-02-06] PHASE 24 PLAN: Ultimate Hardening
+
+## Goal
+Implement a comprehensive suite of hardening features across all layers (L3, L4, L7, Game) to transform the firewall into a pro-active defense system.
+
+## Proposed Changes
+
+###  Layer 3 (Network)
+1.  **Dynamic Geo-Fencing**:
+    - **Component**: \intelligence/geo_fencer.py\.
+    - **Logic**: Tracks traffic volume by Country Code (from GeoIPEnricher). If a country exceeds \	hresholds.yaml/geoip_limit\, temporarily ban the simple Country Code (requires Firewall integration to support country sets).
+2.  **Anti-Spoofing**:
+    - **Component**: \layer3/spoof_detector.py\.
+    - **Logic**: Inspect source IPs against local subnet ranges (Bogons/Martians). Alert/Block private IPs arriving on public interface.
+
+###  Layer 4 (Transport)
+3.  **TCP Signature Analysis**:
+    - **Component**: Update \layer4/syn_flood_analyzer.py\.
+    - **Logic**: Analyze Window Size and TTL. Botnets often have fixed, abnormal values (e.g., WinSize 0 or fixed TTL 64 on WAN).
+4.  **Zombie Killer**:
+    - **Component**: \layer4/connection_killer.py\.
+    - **Logic**: Monitor TCP state table. For connections in ESTABLISHED state > X seconds with 0 bytes throughput, send forged TCP RST packet.
+
+###  Layer 7 (Application)
+5.  **JS Challenge**:
+    - **Component**: \layer7/js_challenge.py\.
+    - **Logic**: A lightweight transparent proxy/server. Intercepts HTTP GET. Returns HTML with \setTimeout(redirect, 500)\. Validates the redirect + Cookie.
+6.  **TLS Fingerprinting**:
+    - **Component**: \layer7/tls_analyzer.py\.
+    - **Logic**: Parse ClientHello. Extract Cipher Suites list. Match against known botnet hashes (or simple whitelist of known browsers).
+
+###  Game Layer
+7.  **Deep Inspection**:
+    - **Component**: Update \layer_game/common/game_protocol_parser.py\.
+    - **Logic**: Validate 'Magic Bytes' and Packet Length constraints for specific games (Minecraft Handshake, Source Query).
+8.  **VIP Whitelist**:
+    - **Component**: \layer_game/vip_manager.py\.
+    - **Logic**: expose API \/api/vip/add\. When a player logs in (simulated or real integration), their IP is added to a 'Pass List' that bypasses Rate Limits for 12 hours.
+
+## Verification
+- Create \	est_suite/hardening_test.py\.
+- Simulate specific packets (e.g., Bad Window Size, Wrong Magic Bytes).
+- Assert they are flagged/dropped.
+

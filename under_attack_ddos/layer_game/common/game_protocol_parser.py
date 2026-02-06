@@ -13,6 +13,7 @@ import json
 import logging
 import yaml
 import abc
+import re
 from datetime import datetime, timezone
 
 # Ensure project root is in path for imports
@@ -28,6 +29,16 @@ class GameProtocolParser(abc.ABC):
         self._setup_logging()
         self.config = self._load_config(config_path)
         self.enricher = GeoIPEnricher()
+        
+        # Deep Inspection Rules (Loaded from config in real scenario)
+        self.packet_regex = self.config.get("deep_inspec_regex", None)
+        if self.packet_regex:
+            try:
+                self.packet_regex = re.compile(self.packet_regex)
+            except re.error as e:
+                logging.error(f"Invalid regex for deep inspection: {self.packet_regex}. Error: {e}")
+                self.packet_regex = None
+
 
         logging.info(f"Initialized {self.script_name} for {self.game_name}. Dry-run: {self.dry_run}")
 
@@ -87,12 +98,46 @@ class GameProtocolParser(abc.ABC):
         }
 
         try:
+            # Original print to stdout for orchestrator consumption
             print(json.dumps(event))
             sys.stdout.flush()
+            # Log to stderr for debugging/monitoring
             logging.warning(f"ALERT: {event_type} from {src_ip}{country_tag} (Severity: {severity})")
         except BrokenPipeError:
             # Handle broken pipe if stdout is closed (e.g. orchestrator died)
             sys.stderr.write("Broken pipe while emitting event.\n")
+        
+        return event # Return the event dictionary for potential further use or testing
+
+    def deep_inspect(self, payload_bytes):
+        """
+        Phase 24: Protocol Deep Inspection.
+        Validates payload against strict protocol rules.
+        Returns check_passed (bool), reason (str).
+        """
+        # 1. Length Check
+        if len(payload_bytes) > self.config.get("max_payload_size", 1400):
+            return False, "payload_too_large"
+        
+        # 2. Magic Byte Check (Example for common games)
+        magic = self.config.get("magic_bytes", None) # e.g. b'\xff\xff\xff\xff' for Source
+        if magic:
+            # Assuming magic is configured as bytes, e.g., b'\xff\xff\xff\xff'
+            if not payload_bytes.startswith(magic):
+                return False, "invalid_magic_bytes"
+
+        # 3. Regex Check (if configured)
+        if self.packet_regex:
+            # Decode bytes to string for regex matching, assuming UTF-8 or similar
+            # This might need adjustment based on actual protocol encoding
+            try:
+                payload_str = payload_bytes.decode('utf-8', errors='ignore')
+                if not self.packet_regex.match(payload_str):
+                    return False, "regex_mismatch"
+            except UnicodeDecodeError:
+                return False, "payload_decode_error"
+
+        return True, "ok"
 
     @abc.abstractmethod
     def run(self):

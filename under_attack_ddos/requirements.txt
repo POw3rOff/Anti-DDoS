@@ -1,4 +1,5 @@
 
+
 pyyaml>=6.0
 scapy>=2.5.0
 geoip2>=4.8.0
@@ -10,5 +11,3 @@ requests>=2.31.0
 fastapi>=0.100.0
 uvicorn>=0.20.0
 websockets>=11.0
-
-requests
