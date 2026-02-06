@@ -38,62 +38,85 @@ class OnlineInference:
             print(json.dumps(event))
             sys.stdout.flush()
 
-        # Extract features
-        src_ip = event.get("source_entity")
-        if not src_ip or src_ip == "global": return
+        try:
+            # Extract features
+            # Support both 'source_entity' (standard) and 'ip' (some sensors)
+            src_ip = event.get("source_entity", event.get("ip"))
+            if not src_ip or src_ip == "global": return
 
-        # Track IP distribution
-        self.recent_ips.append(src_ip)
-        if len(self.recent_ips) > self.max_ip_history:
-            self.recent_ips.pop(0)
+            # Track IP distribution for spatial analysis
+            self.recent_ips.append(src_ip)
+            if len(self.recent_ips) > self.max_ip_history:
+                self.recent_ips.pop(0)
 
-        # Mocking packet size extraction from event data
-        data = event.get("data", {})
-        pkt_size = data.get("len", data.get("pps_observed", 64)) 
-        ts = event.get("timestamp")
-        
-        # Convert timestamp to epoch
-        epoch = time.time()
-        if ts:
-            try:
-                epoch = datetime.fromisoformat(ts.replace('Z', '+00:00')).timestamp()
-            except ValueError:
-                pass
-
-        self.flow_extractor.update(src_ip, pkt_size, epoch)
-        features = self.flow_extractor.calculate_features(src_ip)
-        
-        # Inference
-        is_anomaly, model_conf = self.ensemble.evaluate(features)
-        
-        # Spatial Check (Subnet Proximity)
-        # We look at the distribution of the last N IPs seen globally
-        proximity = self.spatial_extractor.calculate_subnet_proximity(self.recent_ips)
-        spatial_bonus = 0.0
-        if proximity > 0.4: # >40% of traffic from same /24
-            spatial_bonus = 0.15
-
-        entropy, variance, jitter = features
-        total_confidence = min(1.0, model_conf + spatial_bonus)
-
-        if is_anomaly or total_confidence > 0.85:
-            reasons = []
-            if entropy < 0.05: reasons.append("Fixed Packet Size (Low Entropy)")
-            if jitter < 0.001: reasons.append("Robotic Heartbeat (Regular Intervals)")
-            if model_conf > 0.7: reasons.append("Statistical Flow Anomaly")
-            if proximity > 0.4: reasons.append(f"Subnet Campaign Detected (Prox: {round(proximity,2)})")
+            # Extract data metrics
+            data = event.get("data", {})
+            # Determine packet size or use a default
+            pkt_size = data.get("len", data.get("pps_observed", 64)) 
             
-            self.bridge.emit_advisory(src_ip, total_confidence, reasons)
+            # Handle potential string values in JSON metrics
+            if isinstance(pkt_size, str):
+                try: pkt_size = int(pkt_size)
+                except: pkt_size = 64
+
+            # Timestamp extraction
+            ts = event.get("timestamp")
+            epoch = time.time()
+            if ts:
+                try:
+                    # Handle Z suffix for UTC
+                    if ts.endswith('Z'):
+                        ts = ts.replace('Z', '+00:00')
+                    epoch = datetime.fromisoformat(ts).timestamp()
+                except (ValueError, TypeError):
+                    pass
+
+            # 1. Update Flow Stats & Calculate Features
+            self.flow_extractor.update(src_ip, pkt_size, epoch)
+            features = self.flow_extractor.calculate_features(src_ip)
+            logging.debug(f"Features for {src_ip}: {features}")
+            
+            # 2. Ensemble Inference
+            is_anomaly, model_conf = self.ensemble.evaluate(features)
+            logging.debug(f"Is Anomaly: {is_anomaly}, Model Conf: {model_conf}")
+            
+            # 3. Spatial Check (Subnet Proximity)
+            proximity = self.spatial_extractor.calculate_subnet_proximity(self.recent_ips)
+            spatial_bonus = 0.0
+            if proximity > 0.4:
+                spatial_bonus = 0.15
+
+            entropy, variance, jitter = features
+            total_confidence = min(1.0, model_conf + spatial_bonus)
+            logging.debug(f"Total Conf for {src_ip}: {total_confidence}")
+
+            # 4. Final Decision & Emission
+            if is_anomaly or total_confidence > 0.85:
+                logging.debug(f"EMITTING ADVISORY for {src_ip}")
+                reasons = []
+                if entropy < 0.05: reasons.append("Fixed Packet Size (Low Entropy)")
+                if jitter < 0.001: reasons.append("Robotic Heartbeat (Regular Intervals)")
+                if model_conf > 0.7: reasons.append("Statistical Flow Anomaly")
+                if proximity > 0.4: reasons.append(f"Subnet Campaign (Prox: {round(proximity,2)})")
+                
+                self.bridge.emit_advisory(src_ip, total_confidence, reasons)
+
+        except Exception as e:
+            logging.debug(f"Error processing event: {e}")
 
     def run_stdin(self):
         logging.info("ML Inference Engine Started...")
-        for line in sys.stdin:
-            if not self.running: break
+        while self.running:
+            line = sys.stdin.readline()
+            if not line: 
+                logging.info("ML Engine: STDIN closed.")
+                break
             try:
                 event = json.loads(line)
+                logging.debug(f"ML Engine: Received event for {event.get('source_entity')}")
                 self.process_event(event)
             except Exception as e:
-                logging.debug(f"Inference error: {e}")
+                logging.error(f"ML Engine: Inference error: {e}")
 
     def stop(self):
         self.running = False

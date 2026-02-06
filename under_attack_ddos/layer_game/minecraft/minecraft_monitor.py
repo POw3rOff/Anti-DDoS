@@ -39,6 +39,11 @@ class MinecraftMonitor(GameProtocolParser):
         self.handshake_counts = defaultdict(int) 
         self.status_ping_counts = defaultdict(int)
         self.large_packet_counts = defaultdict(int)
+        
+        # Sliding Windows (History of PPS)
+        self.pps_history = defaultdict(lambda: {"handshake": [], "status": []})
+        self.window_size = 5 # 5 intervals of 5 seconds = 25s window
+        
         self.last_reset = time.time()
         
         # Defaults
@@ -59,8 +64,9 @@ class MinecraftMonitor(GameProtocolParser):
                 payload = packet[Raw].load
                 
                 # --- Basic Minecraft Handshake / SLP Detection ---
-                # Handshake packet usually starts with a VarInt length followed by 0x00 (Handshake ID)
                 if len(payload) > 2:
+                    # Minecraft Java: [VarInt len] [ID]. Usually 0x00 for handshake.
+                    # Simple check: payload[1] is frequently 0x00 for ID 0.
                     packet_id = payload[1] 
                     
                     if packet_id == 0x00: 
@@ -70,35 +76,58 @@ class MinecraftMonitor(GameProtocolParser):
                             self.handshake_counts[src_ip] += 1
 
     def analyze(self):
-        """Analyzes behavior windows."""
+        """Analyzes behavior windows using sliding averages."""
         now = time.time()
         duration = now - self.last_reset
-        if duration < 0.1: return
+        if duration < 1.0: return # Minimum 1s window
 
-        ips = set(self.handshake_counts.keys()) | set(self.status_ping_counts.keys()) | set(self.large_packet_counts.keys())
+        ips = set(self.handshake_counts.keys()) | set(self.status_ping_counts.keys()) | set(self.large_packet_counts.keys()) | set(self.pps_history.keys())
 
-        for ip in ips:
-            # 1. Handshake Flood
+        for ip in list(ips):
+            # Calculate current PPS
             h_pps = self.handshake_counts[ip] / duration
-            if h_pps > self.max_handshake_pps:
+            s_pps = self.status_ping_counts[ip] / duration
+            
+            # Update History
+            hist = self.pps_history[ip]
+            hist["handshake"].append(h_pps)
+            hist["status"].append(s_pps)
+            
+            if len(hist["handshake"]) > self.window_size:
+                hist["handshake"].pop(0)
+                hist["status"].pop(0)
+
+            # Average PPS over window
+            avg_h = sum(hist["handshake"]) / len(hist["handshake"])
+            avg_s = sum(hist["status"]) / len(hist["status"])
+
+            # 1. Handshake Flood (Trigger on average exceed)
+            if avg_h > self.max_handshake_pps:
                 self.emit_event("mc_handshake_flood", ip, "HIGH", {
-                    "pps": round(h_pps, 1),
-                    "threshold": self.max_handshake_pps
+                    "avg_pps": round(avg_h, 1),
+                    "current_pps": round(h_pps, 1),
+                    "threshold": self.max_handshake_pps,
+                    "window": f"{self.window_size * 5}s"
                 })
 
             # 2. Status/Ping Flood
-            s_pps = self.status_ping_counts[ip] / duration
-            if s_pps > self.max_status_pps:
+            if avg_s > self.max_status_pps:
                 self.emit_event("mc_status_flood", ip, "MEDIUM", {
-                    "pps": round(s_pps, 1),
+                    "avg_pps": round(avg_s, 1),
+                    "current_pps": round(s_pps, 1),
                     "threshold": self.max_status_pps
                 })
 
-            # 3. Large Packets
-            if self.large_packet_counts[ip] > 10:
+            # 3. Large Packets (Still immediate)
+            if self.large_packet_counts[ip] > 20:
                 self.emit_event("mc_oversized_packets", ip, "LOW", {
-                    "count": self.large_packet_counts[ip]
+                    "count": self.large_packet_counts[ip],
+                    "limit": 20
                 })
+
+            # Housekeeping for inactive IPs
+            if h_pps == 0 and s_pps == 0 and sum(hist["handshake"]) == 0:
+                del self.pps_history[ip]
 
         # Pruning
         self.handshake_counts.clear()

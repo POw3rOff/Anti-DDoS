@@ -16,6 +16,8 @@ import argparse
 import signal
 import queue
 import threading
+import subprocess
+import shlex
 from collections import defaultdict
 from datetime import datetime, timezone
 from intelligence.intelligence_engine import IntelligenceEngine
@@ -97,7 +99,10 @@ class EventIngestor(threading.Thread):
     def _tail_file(self):
         try:
             with open(self.source, 'r') as f:
-                f.seek(0, 2) # Go to end
+                # Only seek to end if we are in continuous mode (long running)
+                # For --once or batch processing, read from start.
+                if not getattr(self, "once_mode", False):
+                    f.seek(0, 2) 
                 while self.running:
                     line = f.readline()
                     if not line:
@@ -175,6 +180,72 @@ class CorrelationEngine:
             
             return dict(self.event_buffer), list(self.active_campaigns), list(self.ml_advisories)
 
+class MLProcessManager(threading.Thread):
+    """
+    Manages the lifecycle of the ML Online Inference subprocess.
+    Pipes events to ML engine and reads advisories back.
+    """
+    def __init__(self, main_queue, log_level="INFO"):
+        super().__init__(daemon=True)
+        self.main_queue = main_queue
+        self.log_level = log_level
+        self.process = None
+        self.running = True
+
+    def run(self):
+        script_path = os.path.abspath("ml_intelligence/inference/online_inference.py")
+        cmd = [sys.executable, "-u", script_path, "--log-level", self.log_level]
+        logging.info(f"Spawning ML Engine: {' '.join(cmd)}")
+        
+        try:
+            self.process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=sys.stderr,
+                text=True,
+                bufsize=1
+            )
+
+            # Thread to read stdout from subprocess
+            def _reader():
+                logging.debug("ML Reader thread started")
+                while self.running:
+                    line = self.process.stdout.readline()
+                    if not line: 
+                        logging.debug("ML Process STDOUT closed.")
+                        break
+                    try:
+                        advisory = json.loads(line)
+                        logging.info(f"ML ADVISORY RECEIVED: {advisory.get('target_entity')} (Conf: {advisory.get('confidence')})")
+                        self.main_queue.put(advisory)
+                    except json.JSONDecodeError:
+                        logging.debug(f"ML Process sent invalid JSON: {line}")
+            
+            reader_thread = threading.Thread(target=_reader, daemon=True)
+            reader_thread.start()
+
+            self.process.wait()
+            logging.warning("ML Engine process terminated.")
+        except Exception as e:
+            logging.error(f"Failed to start ML Engine: {e}")
+
+    def send_event(self, event):
+        """Pipe an ingested event to the ML subprocess STDIN."""
+        if self.process and self.process.stdin:
+            try:
+                line = json.dumps(event) + "\n"
+                print(f"DEBUG: Orchestrator sending event for {event.get('source_entity')}", file=sys.stderr)
+                self.process.stdin.write(line)
+                self.process.stdin.flush()
+            except Exception as e:
+                print(f"ERROR: Failed to pipe event to ML: {e}", file=sys.stderr)
+
+    def stop(self):
+        self.running = False
+        if self.process:
+            self.process.terminate()
+
 class Orchestrator:
     def __init__(self, args, config):
         self.args = args
@@ -185,9 +256,16 @@ class Orchestrator:
         # Components
         source = args.input_file if args.input == 'file' else None
         self.ingestor = EventIngestor(args.input, source, self.queue)
+        if args.once:
+            self.ingestor.once_mode = True
         self.correlation_engine = CorrelationEngine(config)
         self.intelligence_engine = IntelligenceEngine(config)
         self.alert_manager = AlertManager(config)
+
+        # ML Engine
+        self.ml_manager = None
+        if getattr(args, "ml_support", False):
+            self.ml_manager = MLProcessManager(self.queue, args.log_level)
 
         # State dump file
         self.state_file = "runtime/global_state.json"
@@ -197,6 +275,8 @@ class Orchestrator:
         logging.info(f"Starting {SCRIPT_NAME}. Mode: {self.args.mode}")
 
         self.ingestor.start()
+        if self.ml_manager:
+            self.ml_manager.start()
 
         try:
             while self.running:
@@ -205,8 +285,12 @@ class Orchestrator:
                     while True:
                         event = self.queue.get_nowait()
                         self.correlation_engine.ingest(event)
-                        # Process raw events for alerting (e.g., Campaign Alerts, ML Advisories)
+                        # Process raw events for alerting
                         self.alert_manager.process_event(event)
+
+                        # Pipe events to ML if supported
+                        if self.ml_manager and event.get("source") != "ml_intelligence":
+                            self.ml_manager.send_event(event)
                 except queue.Empty:
                     pass
 
@@ -235,8 +319,14 @@ class Orchestrator:
                 # 3. Sleep
                 time.sleep(1.0)
 
-                if self.args.once and self.queue.empty():
-                    self.running = False
+                if self.args.once and self.queue.empty() and not self.ingestor.is_alive():
+                    # If ML is active, give it a tiny moment to finish flushing its buffer
+                    if self.ml_manager:
+                        time.sleep(2.0)
+                        if self.queue.empty():
+                            self.running = False
+                    else:
+                        self.running = False
 
         except KeyboardInterrupt:
             self.stop()
@@ -270,6 +360,8 @@ class Orchestrator:
         logging.info("Stopping...")
         self.running = False
         self.ingestor.stop()
+        if self.ml_manager:
+            self.ml_manager.stop()
 
 # -----------------------------------------------------------------------------
 # Main Entry Point
@@ -282,6 +374,7 @@ def main():
     parser.add_argument("--mode", default="normal", choices=["normal", "monitor", "under_attack"], help="Initial mode")
     parser.add_argument("--daemon", action="store_true", help="Run as background service")
     parser.add_argument("--once", action="store_true", help="Run single pass and exit")
+    parser.add_argument("--ml-support", action="store_true", help="Enable ML-based anomaly detection")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Log verbosity")
 
     args = parser.parse_args()

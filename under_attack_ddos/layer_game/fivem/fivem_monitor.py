@@ -19,7 +19,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from common.game_protocol_parser import GameProtocolParser
-    from scapy.all import sniff, IP, UDP, Raw
+    from scapy.all import sniff, IP, UDP, Raw, conf
+    if sys.platform == "win32":
+        from scapy.all import L3RawSocket
+        conf.L3socket = L3RawSocket
 except ImportError as e:
     print(f"CRITICAL: Missing dependencies: {e}", file=sys.stderr)
     sys.exit(1)
@@ -41,35 +44,54 @@ class FiveMMonitor(GameProtocolParser):
         
         # FiveM specifics: CitizenFX usually has a specific UDP header for Enet
         self.max_pps = self.config.get("max_pps_per_ip", 50)
+        self.query_counts = defaultdict(int)
+        self.max_query_pps = self.config.get("max_query_pps", 5)
 
     def packet_callback(self, packet):
-        """Processes UDP traffic on FiveM port."""
+        """Processes UDP traffic on FiveM port with deeper inspection."""
         if IP in packet and UDP in packet:
             src_ip = packet[IP].src
             self.packet_counts[src_ip] += 1
 
             if Raw in packet:
                 payload = packet[Raw].load
-                # Enet Handshake / Heartbeat detection (simplistic)
-                # FiveM often uses certain byte patterns for 'connect' or 'getinfo'
-                if b'\xff\xff\xff\xffgetinfo' in payload:
-                    logging.debug(f"FiveM info query from {src_ip}")
+                # OOB Query detection
+                if payload.startswith(b'\xff\xff\xff\xffgetinfo'):
+                    self.query_counts = getattr(self, 'query_counts', defaultdict(int))
+                    self.query_counts[src_ip] += 1
+                
+                # Malformed pack weights
+                if len(payload) < 3:
+                    self.packet_counts[src_ip] += 1 # Weighted
 
     def analyze(self):
         now = time.time()
         duration = now - self.last_reset
         if duration < 0.1: return
 
-        for ip, count in list(self.packet_counts.items()):
-            pps = count / duration
+        ips = set(self.packet_counts.keys()) | set(self.query_counts.keys())
+
+        for ip in ips:
+            # 1. General UDP Flood
+            pps = self.packet_counts[ip] / duration
             if pps > self.max_pps:
                 self.emit_event("fivem_flood", ip, "HIGH", {
                     "pps": round(pps, 1),
                     "threshold": self.max_pps
                 })
+            
+            # 2. Query/Reflection Flood
+            q_pps = self.query_counts[ip] / duration
+            if q_pps > self.max_query_pps:
+                self.emit_event("fivem_query_flood", ip, "MEDIUM", {
+                    "pps": round(q_pps, 1),
+                    "threshold": self.max_query_pps
+                })
 
         self.packet_counts.clear()
+        self.query_counts.clear()
         self.last_reset = now
+
 
     def run(self):
         bpf_filter = f"udp port {self.port}"
