@@ -16,10 +16,10 @@ orchestrator:
 
   # State Thresholds (Global Risk Score 0-100)
   thresholds:
-    normal: { max: 29 }
-    monitor: { min: 30, max: 59 }
-    under_attack: { min: 60, max: 89 }
-    escalated: { min: 90 }
+    NORMAL: { max: 29 }
+    MONITOR: { min: 30, max: 59 }
+    UNDER_ATTACK: { min: 60, max: 89 }
+    ESCALATED: { min: 90 }
 
   # Recovery
   cooldown_seconds: 300

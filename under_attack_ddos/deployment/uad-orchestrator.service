@@ -7,7 +7,7 @@ StartLimitIntervalSec=0
 User=uad-orch
 Group=uad-core
 WorkingDirectory=/opt/uad
-ExecStart=/opt/uad/.venv/bin/python3 -u orchestration/under_attack_orchestrator.py --config config/thresholds.yaml --input file --input-file runtime/events.jsonl --log-level INFO
+ExecStart=/opt/uad/.venv/bin/python3 -u orchestration/under_attack_orchestrator.py --config config/orchestrator.yaml --input file --input-file /opt/uad/runtime/events.jsonl --log-level INFO
 # Hardening
 ProtectSystem=strict
 ProtectHome=yes

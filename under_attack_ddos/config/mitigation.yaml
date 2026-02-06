@@ -13,7 +13,7 @@ mitigation:
   # Alerts
   alerts:
     enabled: true
-    log_file: "logs/mitigation_events.json.log"
+    log_file: "/var/log/uad/mitigation_events.json.log"
     webhook_url: "" # Placeholder
 
   # Cooldown
