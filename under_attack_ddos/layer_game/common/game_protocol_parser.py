@@ -37,10 +37,6 @@ class GameProtocolParser(abc.ABC):
     def _load_config(self, path):
         """Loads configuration from YAML file."""
         if not path:
-            # Default to config.yaml in the subclass's directory
-            # We assume the subclass is in a directory like layer_game/metin2/
-            # This might be tricky if instantiated directly, but works for the intended pattern.
-            # A safer default might be passed by the subclass.
             return {}
 
         try:

@@ -1,9 +1,0 @@
-name: "TCP SYN Flood Simulation"
-layer: 4
-events:
-  - type: "syn_flood_detected"
-    count: 100
-    interval: 0.1
-    data:
-      severity: "HIGH"
-      syn_rate_pps: 2500

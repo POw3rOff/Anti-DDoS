@@ -1,0 +1,39 @@
+# Generic Game Protocol Defense Configuration
+# Applies to games without a specific plugin (Rust, Minecraft, CS:GO, ARK, etc.)
+
+# UDP Amplification / Query Floods (A2S_INFO, DNS, etc.)
+query_flood:
+  enabled: true
+  max_pps: 50
+  # Common Query Headers (Hex)
+  # A2S_INFO (Source Engine): FF FF FF FF 54
+  # SAMP: 53 41 4D 50
+  signatures:
+    - name: "A2S_INFO"
+      hex_start: "FFFFFFFF54"
+      max_pps: 20
+    - name: "SAMP_Query"
+      hex_start: "53414D50"
+      max_pps: 10
+
+# Connection Handshake Spam (RakNet, ENet, custom TCP)
+handshake_spam:
+  enabled: true
+  max_cps: 5           # Connections per second per IP
+  half_open_max: 20    # Max "pending" sessions per IP
+
+# Payload Analysis
+payload_rules:
+  - name: "Null_Byte_Flood"
+    regex: '^\x00+$'
+    max_pps: 5
+    severity: "HIGH"
+
+  - name: "Text_Spam_Bot"
+    regex: '^(buy|sell|gold|www\.).*$'
+    max_pps: 2
+    severity: "MEDIUM"
+
+# General Volumetric Safety
+max_pps_per_ip: 100
+max_bandwidth_mbps_per_ip: 2
