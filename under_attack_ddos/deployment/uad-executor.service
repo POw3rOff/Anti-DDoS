@@ -1,0 +1,23 @@
+[Unit]
+Description=Under Attack Mitigation Executor
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+# Needs root for nftables/iptables
+User=root
+Group=uad-core
+WorkingDirectory=/opt/uad
+ExecStart=/opt/uad/.venv/bin/python3 -u mitigation/mitigation_executor.py --input runtime/decisions.json --log-level INFO
+
+# Hardening
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+# Restart Logic
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

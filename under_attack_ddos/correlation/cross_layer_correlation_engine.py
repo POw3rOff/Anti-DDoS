@@ -132,13 +132,40 @@ class CrossLayerCorrelationEngine:
                 "layers": list(layers_seen),
                 "score": severity_sum
             })
-            # Clear buffer to avoid spam? Or rely on orchestrator.
-            # events.clear()
+        
+        # Rule: Slow-and-Network (L7 Slow + Network Anomaly)
+        # Specifically looks for Slowloris matching with L3/L4 volumetric signals
+        has_l7_slow = any(e.get("layer") == "layer7" and "slow" in str(e.get("event")).lower() for e in events)
+        has_network_anomaly = any(e.get("layer") in ["layer3", "layer4"] for e in events)
+        
+        if has_l7_slow and has_network_anomaly:
+             self.emit_campaign("Slow-and-Network Linkage", ip, "CRITICAL", {
+                "layers": ["layer7", "network"],
+                "details": "L7 Slow attack combined with L3/L4 volumetric traffic"
+            })
 
     def _update_subnet_score(self, subnet, event):
-        # Todo: Implement proper sliding window for subnets.
-        # For now, just a placeholder.
-        pass
+        """Track anomaly density across subnets to detect botnet nodes."""
+        # Simple implementation: accumulate severity scores per subnet
+        sev = event.get("severity", "LOW")
+        score = 1
+        if sev == "MEDIUM": score = 5
+        elif sev == "HIGH": score = 10
+        elif sev == "CRITICAL": score = 20
+        
+        self.subnet_scores[subnet] += score
+
+        # Rule: Subnet-wide Campaign
+        # If a /24 has a cumulative score > 50 in the macro window (theoretical)
+        # For simplicity in this refinement, we emit if score > 50
+        if self.subnet_scores[subnet] > 50:
+            self.emit_campaign("Subnet-wide Botnet Activity", subnet, "HIGH", {
+                "layers": "multi",
+                "score": self.subnet_scores[subnet],
+                "description": "High anomaly density in CIDR"
+            })
+            # Reset score to avoid duplicate alerts (or use cooldown)
+            self.subnet_scores[subnet] = 0.0
 
     def emit_campaign(self, campaign_type, target, confidence, details):
         alert = {

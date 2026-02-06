@@ -1,0 +1,5 @@
+layer3:
+  spoofing:
+    entropy_threshold: 0.9
+    sample_size: 1000
+    martian_check: true

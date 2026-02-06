@@ -5,9 +5,10 @@ mitigation:
 
   # State Machine
   states:
-    normal: { risk_max: 29 }
-    defensive: { risk_min: 30, risk_max: 59 }
-    high_alert: { risk_min: 60 }
+    NORMAL: { risk_max: 29 }
+    MONITOR: { risk_min: 30, risk_max: 59 }
+    UNDER_ATTACK: { risk_min: 60, risk_max: 89 }
+    ESCALATED: { risk_min: 90 }
 
   # Alerts
   alerts:

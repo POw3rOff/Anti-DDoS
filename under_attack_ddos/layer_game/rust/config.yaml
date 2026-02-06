@@ -1,0 +1,46 @@
+# Rust Game Protocol Defense Configuration
+# Rust uses RakNet (UDP) for game traffic and Source Engine Query (A2S) for server lists.
+
+# RakNet Connection Handshake (Open Connection Request 1 & 2)
+handshake_flood:
+  enabled: true
+  max_pps: 10              # Max handshake initiation packets per second per IP
+  half_open_max: 50        # Max pending sessions per IP
+  packet_id_whitelist:     # Common RakNet Packet IDs
+    - 0x05  # OPEN_CONNECTION_REQUEST_1
+    - 0x07  # OPEN_CONNECTION_REQUEST_2
+    - 0x09  # CONNECTION_REQUEST
+
+# A2S Query Flood (Server Browser Spam)
+query_flood:
+  enabled: true
+  max_pps: 20              # Strict limit on server queries
+  cache_response: true     # (Future) Enable caching for queries
+  signatures:
+    - name: "A2S_INFO"
+      hex_start: "FFFFFFFF54"
+      max_pps: 15
+    - name: "A2S_PLAYER"
+      hex_start: "FFFFFFFF55"
+      max_pps: 5
+
+# RCON (Remote Console) Brute Force Protection
+rcon_protection:
+  enabled: true
+  port: 28016
+  max_auth_failures: 3
+  ban_duration: 3600       # Seconds
+  whitelist:
+    - "127.0.0.1"
+
+# Volumetric Safety
+max_pps_per_ip: 150
+max_bandwidth_mbps: 3.0
+
+# Session Abuse (Post-Handshake Gameplay Traffic)
+session_abuse:
+  enabled: true
+  max_pps: 100             # Max packets per second for active gameplay
+  max_mbps: 1.0            # Max bandwidth per second (1 Mbps is generous for Rust)
+  max_entity_updates_pps: 20 # Limit large packets (potential entity spam)
+  idle_timeout: 60         # Cleanup session state after 60s inactivity

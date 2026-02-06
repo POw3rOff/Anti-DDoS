@@ -1,0 +1,15 @@
+
+
+pyyaml>=6.0
+scapy>=2.5.0
+geoip2>=4.8.0
+prometheus_client>=0.17.0
+# bcc is platform-specific (Linux/Kernel) and usually installed via package manager, but pip package exists
+# bcc>=0.29.0 
+requests
+fastapi
+uvicorn>=2.31.0
+
+fastapi>=0.100.0
+uvicorn>=0.20.0
+websockets>=11.0

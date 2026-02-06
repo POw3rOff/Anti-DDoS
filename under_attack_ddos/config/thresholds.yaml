@@ -25,3 +25,21 @@ layer4:
 layer7:
   requests_per_minute:
     global_baseline: 5000
+
+# Alerting
+discord_webhook_url: ''
+
+
+# Layer 3 Hardening
+geoip_limit: 1000 # Max requests per minute per country before ban
+bogon_check: true # Drop private IPs on public interface
+
+
+# Layer 4 Hardening (Merged)
+  syn_flood_hardening:
+    check_signatures: true
+    bad_window_sizes: [0, 1024, 3072] 
+  zombie_killer:
+    enabled: true
+    idle_timeout: 120
+
