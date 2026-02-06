@@ -13,14 +13,7 @@ import time
 from datetime import datetime
 from intelligence.enrichment import GeoIPEnricher
 
-STATE_FILE = "runtime/global_state.json"
-SERVICES = [
-    "uad-orchestrator",
-    "uad-l3-analyzer",
-    "uad-l4-analyzer",
-    "uad-executor",
-    "uad-exporter"
-]
+from config.consts import STATE_FILE, SERVICES, LOGS_DIR, RUNTIME_DIR, LAYERS
 
 def get_status():
     """Reads the current system status."""
@@ -60,7 +53,7 @@ def manage_services(action):
 
 def show_logs():
     """Tails the system logs."""
-    log_file = "logs/orchestrator.log"
+    log_file = os.path.join(LOGS_DIR, "orchestrator.log")
     if not os.path.exists(log_file):
         print(f"Log file {log_file} not found.")
         return
@@ -86,8 +79,8 @@ def panic_mode():
     print("  -> Blocking all non-whitelisted traffic (Simulated)")
     
     # Send signal to orchestrator via lock file
-    os.makedirs("runtime", exist_ok=True)
-    with open("runtime/OVERRIDE.lock", "w") as f:
+    os.makedirs(RUNTIME_DIR, exist_ok=True)
+    with open(os.path.join(RUNTIME_DIR, "OVERRIDE.lock"), "w") as f:
         f.write("ESCALATED")
     print("Panic signal sent. Global Orchestrator will react on next tick.")
 

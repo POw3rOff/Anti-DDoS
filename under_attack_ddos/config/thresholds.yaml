@@ -35,12 +35,11 @@ geoip_limit: 1000 # Max requests per minute per country before ban
 bogon_check: true # Drop private IPs on public interface
 
 
-# Layer 4 Hardening
-layer4:
-  syn_flood:
+# Layer 4 Hardening (Merged)
+  syn_flood_hardening:
     check_signatures: true
-    bad_window_sizes: [0, 1024, 3072] # Signatures of known botnets (e.g. Mirai variants)
+    bad_window_sizes: [0, 1024, 3072] 
   zombie_killer:
     enabled: true
-    idle_timeout: 120 # Seconds before killing idle connection
+    idle_timeout: 120
 

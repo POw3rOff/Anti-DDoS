@@ -29,6 +29,7 @@ from forensics.pcap_recorder import PcapRecorder
 from forensics.pcap_recorder import PcapRecorder
 from ebpf.xdp_loader import XDPLoader
 from mitigation.proxy_adapter import ProxyAdapter
+from config.consts import SystemState, STATE_FILE
 
 # Third-party imports
 try:
@@ -59,10 +60,10 @@ DEFAULT_CONFIG = {
         },
         "cross_layer_multiplier": 1.5,
         "thresholds": {
-            "normal": {"max": 29},
-            "monitor": {"min": 30, "max": 59},
-            "under_attack": {"min": 60, "max": 89},
-            "escalated": {"min": 90}
+            SystemState.NORMAL: {"max": 29},
+            SystemState.MONITOR: {"min": 30, "max": 59},
+            SystemState.UNDER_ATTACK: {"min": 60, "max": 89},
+            SystemState.ESCALATED: {"min": 90}
         },
         "cooldown_seconds": 300
     }
@@ -286,7 +287,7 @@ class Orchestrator:
         self.proxy_adapter = ProxyAdapter()
 
         # State dump file
-        self.state_file = "runtime/global_state.json"
+        self.state_file = STATE_FILE
         os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
 
     def run(self):
@@ -361,11 +362,11 @@ class Orchestrator:
             logging.info(f"STATE CHANGE >>> {state} (Score: {directive['score']})")
             
             # Automated Forensics
-            if state in ["UNDER_ATTACK", "ESCALATED"]:
+            if state in [SystemState.UNDER_ATTACK, SystemState.ESCALATED]:
                 filename = self.pcap_recorder.start_capture(duration=300) # Record for 5 mins
                 if filename:
                     logging.warning(f"FORENSICS: Started PCAP capture {filename}")
-            elif state in ["NORMAL", "MONITOR"]:
+            elif state in [SystemState.NORMAL, SystemState.MONITOR]:
                 if self.pcap_recorder.stop_capture():
                     logging.info("FORENSICS: Stopped PCAP capture (State Normalized)")
 
@@ -410,7 +411,7 @@ def main():
     parser.add_argument("--config", required=True, help="Path to YAML configuration")
     parser.add_argument("--input", default="stdin", choices=["stdin", "file"], help="Input source")
     parser.add_argument("--input-file", help="Path to input file (if input=file)")
-    parser.add_argument("--mode", default="normal", choices=["normal", "monitor", "under_attack"], help="Initial mode")
+    parser.add_argument("--mode", default=SystemState.NORMAL, choices=[SystemState.NORMAL, SystemState.MONITOR, SystemState.UNDER_ATTACK], help="Initial mode")
     parser.add_argument("--daemon", action="store_true", help="Run as background service")
     parser.add_argument("--once", action="store_true", help="Run single pass and exit")
     parser.add_argument("--ml-support", action="store_true", help="Enable ML-based anomaly detection")

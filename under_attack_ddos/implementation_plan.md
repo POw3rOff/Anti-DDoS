@@ -661,3 +661,25 @@ Connect the L7 Hardening Logic (JS Challenge) directly to the operational Proxy 
 -   **Automated**:
     -   Unit test challenge_integration_test.py checking API response.
 
+
+[2026-02-06] PHASE 27 PLAN: Stabilization
+
+## Goal
+Fix critical configuration errors and inconsistencies identified in the Project Analysis Report to ensure system stability and predictability.
+
+## Proposed Changes
+
+###  Configuration
+1.  **config/thresholds.yaml**: Merge the duplicate \layer4\ sections initiated in Phase 24 to prevent overwriting base thresholds.
+2.  **config/mitigation.yaml**: Update state names to match \Orchestrator\ enums (UPPERCASE: NORMAL, MONITOR, UNDER_ATTACK, ESCALATED).
+
+###  Dependencies
+3.  **equirements.txt**: Explicitly add \astapi\ and \uvicorn\ (added in Phase 26).
+
+###  Code Structure
+4.  **config/consts.py**: Create a file to hold shared constants (Paths, State Enums) to avoid magic strings across modules.
+
+## Verification
+-   **Manual**: Verify \uad.py status\ runs without errors after config updates.
+-   **Automated**: Run 	est_suite/hardening_test.py to ensure config parsing is still valid.
+
