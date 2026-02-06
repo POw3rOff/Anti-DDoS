@@ -95,4 +95,37 @@ Migrate volumetric detection to the Linux Kernel using XDP for high-performance 
 2. Generate synthetic SYN flood traffic.
 3. Verify `syn_flood_analyzer.py --use-ebpf` detects the flood and triggers a block directive.
 4. Verify the IP is added to both `ipset` and the eBPF `map_blacklist`.
+
+---
+
+# Phase 9: ML Intelligence Maturity implementation_plan.md
+
+## Goal
+Transform the skeletal ML layer into a functional anomaly detection engine capable of identifying "low-and-slow" attacks and coordinated botnet behavior.
+
+## Proposed Changes
+
+### Feature Engineering
+- **[MODIFY] [flow_features.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/ml_intelligence/features/flow_features.py)**: Optimize windowed statistical calculations (entropy, variance, jitter) and ensure robustness against sparse data.
+
+### Model Refinement
+- **[MODIFY] [isolation_forest.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/ml_intelligence/models/isolation_forest.py)**: Replace hardcoded rules with a dynamic thresholding mechanism (e.g., Z-score based or simplified isolation logic) to handle evolving traffic patterns.
+- **[MODIFY] [spatial_features.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/ml_intelligence/features/spatial_features.py)**: Implement basic IP proximity analysis to detect subnet-wide campaigns.
+
+### System Integration
+- **[MODIFY] [online_inference.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/ml_intelligence/inference/online_inference.py)**: Refine the stream processing loop to correctly map sensor events to feature vectors and handle high-throughput event processing.
+- **[MODIFY] [under_attack_orchestrator.py](file:///C:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/orchestration/under_attack_orchestrator.py)**: Implement a collector flag to pipe events into the ML inference engine.
+
+## Verification Plan
+
+### Automated Tests
+- Unit tests for feature extraction accuracy.
+- Validation of the "IsAnomaly" flag against synthetic botnet trace data.
+
+### Manual Verification
+1. Start the Orchestrator with ML support: `python orchestration/under_attack_orchestrator.py --ml-support`.
+2. Inject a "fixed packet size" low-rate attack.
+3. Verify that the ML Engine emits a `distributed_botnet_suspected` advisory.
+4. Confirm that the Orchestrator increases the Global Risk Score (GRS) based on the ML advisory.
+ Boris? No, Antigravity.
  Boris? No, Antigravity.

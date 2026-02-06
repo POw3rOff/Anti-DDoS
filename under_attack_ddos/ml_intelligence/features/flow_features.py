@@ -7,6 +7,7 @@ Responsibility: Calculate statistical features from traffic flows.
 """
 
 import math
+import time
 from collections import defaultdict
 
 class FlowFeatureExtractor:
@@ -28,7 +29,7 @@ class FlowFeatureExtractor:
             win["times"].pop(0)
 
     def calculate_features(self, src_ip):
-        """Returns a feature vector: [entropy, pps_variance, jitter]"""
+        """Returns a feature vector: [entropy, variance, jitter]"""
         win = self.windows.get(src_ip)
         if not win or len(win["sizes"]) < 10:
             return [0.0, 0.0, 0.0]
@@ -36,18 +37,21 @@ class FlowFeatureExtractor:
         # 1. Entropy of sizes
         entropy = self._calculate_entropy(win["sizes"])
 
-        # 2. PPS Variance (approximated within window)
-        dur = win["times"][-1] - win["times"][0]
-        pps = len(win["sizes"]) / max(dur, 0.001)
-        # For variance, we look at inter-arrival times
+        # 2. Inter-arrival dynamics
         intervals = [win["times"][i] - win["times"][i-1] for i in range(1, len(win["times"]))]
+        if not intervals:
+            return [round(entropy, 3), 0.0, 0.0]
+
         mean_interval = sum(intervals) / len(intervals)
+        
+        # Variance of intervals (how much the timing varies)
         variance = sum((x - mean_interval)**2 for x in intervals) / len(intervals)
 
-        # 3. Jitter (standard deviation of intervals)
+        # Jitter (standard deviation of intervals)
+        # Low jitter indicates robotic, highly regular timing.
         jitter = math.sqrt(variance)
 
-        return [round(entropy, 3), round(variance, 6), round(jitter, 6)]
+        return [round(entropy, 4), round(variance, 6), round(jitter, 6)]
 
     def _calculate_entropy(self, sizes):
         if not sizes: return 0.0

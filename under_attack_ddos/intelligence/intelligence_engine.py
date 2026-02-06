@@ -91,15 +91,22 @@ class IntelligenceEngine:
                 global_active_layers.add("ml_intelligence")
                 # ML increases total score based on confidence
                 conf = adv.get("confidence", 0.0)
-                ml_boost = 20 * conf
+                
+                # Dynamic boost mapping
+                # HIGH confidence ML alert (>0.9) can escalate to MONITOR/UNDER_ATTACK alone
+                ml_boost = 30 * conf 
+                if conf > 0.9: ml_boost = 60 # Direct escalation signal
+                
                 total_score = min(total_score + ml_boost, 100.0)
                 
-                # Also treat the target of ML advisory as an active source if high confidence
-                if conf > 0.7:
+                # Track ML suspicion as an active source
+                target = adv.get("target_entity")
+                if target:
                     active_sources.append({
-                        "ip": adv.get("target_entity"),
-                        "score": 75.0, # High suspicion
-                        "layers": ["ml_intelligence"]
+                        "ip": target,
+                        "score": round(100 * conf, 1),
+                        "layers": ["ml_intelligence"],
+                        "justification": adv.get("data", {}).get("contributing_features", [])
                     })
 
         self.grs_score = round(total_score, 1)

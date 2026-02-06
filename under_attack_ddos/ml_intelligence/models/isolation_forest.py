@@ -8,7 +8,14 @@ Responsibility: Detect anomalies in feature vectors.
 
 import random
 
+import statistics
+
 class IsolationForestWrapper:
+    def __init__(self):
+        # Baseline history for dynamic thresholding
+        self.history = []
+        self.max_history = 500
+
     def predict(self, feature_vector):
         """
         Returns -1 for anomaly, 1 for normal.
@@ -16,19 +23,25 @@ class IsolationForestWrapper:
         """
         entropy, variance, jitter = feature_vector
 
-        # 1. FIXED PACKET SIZE ATTACK (Low Entropy)
-        # Constant payload size is a strong indicator of simple bots.
-        if entropy < 0.05:
-            return -1
+        # 1. HARD LIMITS (Sanity Checks)
+        if entropy < 0.05: return -1 # Fixed packet size
+        if jitter < 0.0001: return -1 # Robotic heartbeat
 
-        # 2. LOW-AND-SLOW / HEARTBEAT (Very low Jitter)
-        # If jitter is extremely low, it suggests a perfectly timed bot loop.
-        if jitter < 0.001 and variance < 0.0001:
-             return -1
+        # 2. DYNAMIC THRESHOLDING (Z-Score)
+        # If we have enough history, check for significant deviations
+        if len(self.history) >= 30:
+            # We track 'variance' as the primary indicator of PPS volatility
+            variances = [h[1] for h in self.history]
+            mean_v = statistics.mean(variances)
+            stdev_v = statistics.stdev(variances)
+            
+            # If current variance is > 3 standard deviations from mean -> Anomaly
+            if stdev_v > 0 and (variance - mean_v) / stdev_v > 3.0:
+                return -1
 
-        # 3. BURST ATTACK (High Variance)
-        # Unusually high variance in arrival times might indicate pulse-wave DDoS.
-        if variance > 1.0:
-            return -1
+        # Update History
+        self.history.append(feature_vector)
+        if len(self.history) > self.max_history:
+            self.history.pop(0)
 
         return 1
