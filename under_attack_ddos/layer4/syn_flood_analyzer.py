@@ -155,21 +155,39 @@ class SynFloodAnalyzer:
         # "tcp[13] & 2 != 0" checks if the SYN bit is set in the flags field
         bpf_filter = "tcp[13] & 2 != 0"
 
-        logging.info(f"Starting capture loop. Window: {window_size}s. Filter: '{bpf_filter}'")
+        logging.info(f"Starting {'eBPF ' if self.args.ebpf else ''}capture loop. Window: {window_size}s. Filter: '{bpf_filter}'")
 
         try:
             while self.running:
                 start_loop = time.time()
 
-                # Sniff packets
-                # count=0 means infinite (controlled by timeout)
-                # store=0 prevents memory leaks
-                sniff(filter=bpf_filter, prn=self.packet_callback, store=0, timeout=window_size)
+                if self.args.ebpf:
+                    # 1. Path to loader
+                    loader_path = os.path.join(os.path.dirname(__file__), "../ebpf/loader.py")
+                    cmd = [sys.executable, loader_path, "--syn-stats", "--json"]
+                    if self.args.dry_run: cmd.append("--dry-run")
+                    
+                    try:
+                        import subprocess
+                        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                        ebpf_stats = json.loads(result.stdout)
+                        # ebpf_stats format: {"10.0.0.1": 1500, ...}
+                        for ip, count in ebpf_stats.items():
+                            self.syn_counts[ip] = count
+                        
+                        time.sleep(window_size)
+                    except Exception as e:
+                        logging.error(f"Failed to fetch eBPF SYN stats: {e}")
+                        time.sleep(window_size)
+                else:
+                    # Sniff packets
+                    # count=0 means infinite (controlled by timeout)
+                    # store=0 prevents memory leaks
+                    sniff(filter=bpf_filter, prn=self.packet_callback, store=0, timeout=window_size)
 
                 # Analyze
                 duration = time.time() - start_loop
                 if duration < 0.1: duration = 0.1
-
                 self.analyze_window(duration)
 
                 if self.args.once:
@@ -200,6 +218,7 @@ def main():
     parser.add_argument("--daemon", action="store_true", help="Run as background service")
     parser.add_argument("--once", action="store_true", help="Run single pass and exit")
     parser.add_argument("--json", action="store_true", help="Output JSON events to STDOUT")
+    parser.add_argument("--ebpf", action="store_true", help="Use eBPF sensors for metrics")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Log verbosity")
 
     args = parser.parse_args()
@@ -218,7 +237,13 @@ def main():
     )
 
     # Root Check
-    if os.geteuid() != 0 and not args.dry_run:
+    is_root = False
+    try:
+        is_root = (os.geteuid() == 0)
+    except AttributeError:
+        is_root = False
+
+    if not is_root and not args.dry_run:
         logging.warning("Not running as root. Sniffing may fail.")
 
     # Initialization

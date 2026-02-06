@@ -152,7 +152,7 @@ class IPFloodAnalyzer:
                 if self.args.ebpf:
                     # 1. Path to loader (assuming same repo structure)
                     loader_path = os.path.join(os.path.dirname(__file__), "../ebpf/loader.py")
-                    cmd = [sys.executable, loader_path, "--stats", "--json"]
+                    cmd = [sys.executable, loader_path, "--source-stats", "--json"]
                     if self.args.dry_run: cmd.append("--dry-run")
                     
                     try:
@@ -226,10 +226,14 @@ def main():
         stream=sys.stderr # Logs go to stderr
     )
 
-    # Root Check (Scapy needs root for sniffing)
-    if os.geteuid() != 0 and not args.dry_run:
-        # Note: In dry-run we might allow non-root if reading from pcap (future feature),
-        # but for live sniffing we need privileges.
+    # Root Check
+    is_root = False
+    try:
+        is_root = (os.geteuid() == 0)
+    except AttributeError:
+        is_root = False
+
+    if not is_root and not args.dry_run:
         logging.warning("Not running as root. Sniffing might fail or show limited packets.")
 
     # Initialization

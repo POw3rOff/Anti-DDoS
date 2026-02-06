@@ -174,6 +174,7 @@ def main():
     parser.add_argument("--unload", action="store_true", help="Unload BPF")
     parser.add_argument("--stats", action="store_true", help="Read metrics")
     parser.add_argument("--syn-stats", action="store_true", help="Read SYN metrics")
+    parser.add_argument("--source-stats", action="store_true", help="Read per-source L3 metrics")
     parser.add_argument("--block", help="Block specific IP")
     parser.add_argument("--json", action="store_true", help="Output stats in JSON format")
     parser.add_argument("--dry-run", action="store_true", help="Simulate behavior")
@@ -218,6 +219,14 @@ def main():
         else:
             for ip, count in stats.items():
                 print(f"IP {ip}: {count} SYNs")
+
+    if args.source_stats:
+        stats = manager.get_source_stats()
+        if args.json:
+            print(json.dumps(stats))
+        else:
+            for ip, val in stats.items():
+                print(f"IP {ip}: {val['packets']} pkts, {val['bytes']} bytes")
 
 if __name__ == "__main__":
     main()
