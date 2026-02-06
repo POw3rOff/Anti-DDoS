@@ -1,85 +1,70 @@
-Esta suite de segurança evoluiu de um firewall robusto baseado em iptables para uma solução completa de hardening e auditoria, desenvolvida por p0w3r0ff para proteger a infraestrutura da Cyber-Gamers. O projeto foi exaustivamente testado e validado pela comunidade contra ataques DDoS e outras ameaças. Para mais informações, visite https://cyber-gamers.org/
+# under_attack_ddos
 
----
+**under_attack_ddos** is a modular, scalable, defensive system designed to detect and mitigate attacks across multiple network layers. It employs a distributed architecture with a central orchestrator, cross-layer correlation, and specific game protocol protections.
 
 # Cyber Gamers Linux Security Suite
 
-Este repositório evoluiu para uma suite completa de segurança, auditoria e hardening para sistemas Linux. Além do firewall original, ele agora inclui ferramentas para proteção de kernel, backups inteligentes, resposta a incidentes, detecção de intrusões e muito mais.
+This project is organized into modular components, each responsible for specific layers of defense or system management:
+
+- **`orchestration/`**: The core of the system. Contains `under_attack_orchestrator.py`, which manages the system state (NORMAL, MONITOR, UNDER_ATTACK, ESCALATED) based on a Global Risk Score (GRS).
+- **`layer3/`**: Network layer defenses. Includes `ip_flood_analyzer.py`, `l3_spoofing_detector.py` (for Bogons/Martians), and bandwidth monitoring to handle volumetric attacks.
+- **`layer4/`**: Transport layer defenses. Focuses on UDP flood monitoring (`l4_udp_flood_monitor.py`) and SYN flood analysis.
+- **`layer7/`**: Application layer defenses. Analyzes request rates (`l7_request_rate_analyzer.py`) to mitigate HTTP/application floods.
+- **`layer_game/`**: Game-aware defense layer. Includes specific protocol parsers and monitors for games (e.g., Metin2, Rust) and a generic game correlation engine.
+- **`ml_intelligence/`**: Machine Learning layer. Contains anomaly detection models (`isolation_forest`, `ensemble`), feature extraction (`flow_features`), and bridges to the orchestrator.
+- **`correlation/`**: Cross-layer correlation engine. Aggregates events from all layers to identify complex attack campaigns.
+- **`mitigation/`**: Active response module. Includes `mitigation_controller.py` for executing defense playbooks.
+- **`observability/`**: Monitoring tools. Includes `attack_timeline.py` for tracking attack history.
+- **`dashboard/`**: CLI-based dashboard (`dashboard.py`) for real-time system monitoring.
+- **`config/`**: Centralized configuration files (YAML) for all modules.
+- **`test_suite/`**: Functional tests and chaos simulators (`chaos_ddos_simulator.py`).
+- **`web_security/`**: Integration designs for proxy protection.
+- **`ebpf/`**: Architectural designs for eBPF-based high-performance filtering.
+- **`intelligence/`**: System design documentation for intelligence modules.
+
+## Core Architecture
+
+The system operates on a **Hub-and-Spoke** model where independent detection modules (layers) emit JSON events to a central **Orchestrator**.
+
+### Orchestration & Global Risk Score
+The `Orchestrator` ingests events, calculates a **Global Risk Score (GRS)**, and transitions the system between states:
+- **NORMAL**: Routine monitoring.
+- **MONITOR**: Elevated scrutiny.
+- **UNDER_ATTACK**: Active mitigation engaged.
+- **ESCALATED**: Maximum defense posture.
+
+### Game Layer
+Unlike generic solutions, `under_attack_ddos` includes a dedicated `layer_game` that understands specific game protocols (e.g., Metin2 login handshakes), allowing for precise anomaly detection without affecting legitimate players.
+
+### ML Intelligence
+The `ml_intelligence` module provides advanced anomaly detection using isolation forests and ensemble models to identify low-and-slow attacks that static thresholds might miss.
 
 ## 🚀 Guia Rápido (Quick Start)
 
-Encontre rapidamente a ferramenta certa para sua necessidade:
+The system is designed to be run as a collection of services. The entry point for the control plane is the Orchestrator:
 
-| Objetivo | Ferramenta Principal | Comando Sugerido |
-| :--- | :--- | :--- |
-| **Ativar Anti-DDoS** | Menu Interativo | `cd ddos_protection && ./Menu-2.sh` |
-| **Detectar Anomalias** | Análise de Logs (Python) | `cd python_security_suite && ./run_anomaly_detector.sh /var/log/syslog` |
-| **Auditar Kernel** | Verificação de Segurança | `cd kernel_os_security_suite && ./auditoria_kernel.sh` |
-| **Monitorar Rede** | Tráfego de Saída | `cd linux_security_scripts && ./outbound_monitor.sh` |
-| **Forense** | Snapshot em Incidente | `cd incident_response_suite && ./snapshot_em_incidente.sh` |
-| **Backup Seguro** | Backup Incremental | `cd smart_backup_suite && ./backup_incremental.sh /etc /backup/etc` |
+```bash
+python3 under_attack_ddos/orchestration/under_attack_orchestrator.py --config under_attack_ddos/config/orchestrator.yaml
+```
 
-## Estrutura do Projeto
+Detectors can be run independently or piped into the orchestrator:
 
-O projeto está organizado em suites modulares, cada uma focada em um aspecto crítico da segurança:
+```bash
+# Example: Running the L3 Flood Analyzer
+python3 under_attack_ddos/layer3/ip_flood_analyzer.py
 
-### 🛡️ Segurança de Rede e Firewall
-**Diretórios:** `ddos_protection`, `linux_firewall_suite`, `advanced_network_security_suite`, `network_access_control`
-*   **Anti-DDoS:** Scripts avançados com integração ao Kernel e Blocklists para mitigação de ataques volumétricos.
-*   **Firewall Modular:** Suporte para `iptables`, `nftables`, `ufw`, `shorewall`, `firewalld` e `fail2ban`.
-*   **Monitorização:** Detecção de tráfego de saída suspeito, túneis, scans internos e anomalias de DNS/TLS.
+# Example: Running the L3 Spoofing Detector
+python3 under_attack_ddos/layer3/l3_spoofing_detector.py
+```
 
-### 🐧 Kernel e Hardening do SO
-**Diretórios:** `kernel_os_security_suite`, `system_security_suite`, `system_resistance_suite`
-*   **Auditoria:** Verificação de integridade do kernel, módulos e binários do sistema.
-*   **Hardening:** Ajustes de sysctl, detecção de rootkits, exploits locais e verificação de LSM (SELinux/AppArmor).
-*   **Resistência:** Testes de resistência do sistema contra vetores de ataque comuns.
+## Configuration
 
-### 💾 Backups e Redundância
-**Diretórios:** `smart_backup_suite`, `backup_security_suite`, `redundancy_and_survival_suite`, `governance_and_control_suite`
-*   **Inteligência:** Backups incrementais, compressão adaptativa e retenção GFS (Grandfather-Father-Son).
-*   **Segurança:** Criptografia, airgap, honeypots de backup e proteção contra ransomware.
-*   **Resiliência:** Replicação geográfica e validação cruzada.
+All configuration is managed in `config/`. Key files include:
+- `orchestrator.yaml`: Global settings and state thresholds.
+- `thresholds.yaml`: Detection limits for various layers.
+- `mitigation.yaml`: Rules for active response.
 
-### 🚨 Detecção e Resposta a Incidentes
-**Diretórios:** `incident_response_suite`, `intrusion_detection_suite`, `advanced_security_suite`, `logging_observability_suite`
-*   **Resposta:** Ferramentas para congelamento de evidências, snapshots forenses e timeline de restauro.
-*   **Detecção:** Identificação de beaconing, reverse shells, privilégios elevados e assinaturas de ataque.
-*   **Observabilidade:** Centralização de logs, validação de timestamps e detecção de manipulação de logs (tampering).
+## Development
 
-### 📦 Segurança de Aplicações e Containers
-**Diretórios:** `container_security_suite`, `application_security_suite`, `supply_chain_security_suite`, `web_security`
-*   **Containers:** Auditoria de Docker/Podman, verificação de imagens e detecção de escapes.
-*   **Web/App:** Proteção contra RCE, Webshells, SSRF e monitorização de uploads.
-*   **Supply Chain:** Validação de updates, dependências e inventário de software.
-
-### 🔒 Zero Trust e Automação
-**Diretórios:** `zero_trust_suite`, `automation_and_maturity_suite`
-*   **Zero Trust:** Auditoria de movimento lateral, isolamento de serviços e privilégios mínimos.
-*   **Maturidade:** Dashboards de estado, scoring de segurança e auditorias automatizadas.
-
-## Instalação e Uso
-
-A maioria dos scripts foi desenvolvida para ser executada em ambiente Linux (Debian/Ubuntu/CentOS) e requer privilégios de **root**.
-
-1.  **Clone o repositório:**
-    ```bash
-    git clone https://github.com/seu-repo/cyber-gamers-security.git
-    cd cyber-gamers-security
-    ```
-
-2.  **Permissões de Execução:**
-    ```bash
-    chmod +x **/*.sh
-    ```
-
-3.  **Execução:**
-    Navegue até o diretório da suite desejada e execute o script correspondente. Por exemplo, para ativar o novo Anti-DDoS:
-    ```bash
-    cd ddos_protection
-    ./new_anti_ddos.sh
-    ```
-
-## Aviso Legal
-
-Estes scripts são fornecidos "como estão", sem garantia de qualquer tipo. O uso destas ferramentas é de inteira responsabilidade do utilizador. Teste sempre em ambiente controlado antes de aplicar em produção.
+- **Tests**: Run the test suite via `test_suite/`.
+- **Roadmap**: See `IMPLEMENTATION_ROADMAP.md` and `PHASED_IMPLEMENTATION_ROADMAP.md` for project status.

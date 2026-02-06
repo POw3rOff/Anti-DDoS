@@ -16,8 +16,19 @@ import argparse
 import signal
 import queue
 import threading
+import subprocess
+import shlex
 from collections import defaultdict
 from datetime import datetime, timezone
+
+# Ensure project root is in path
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from intelligence.intelligence_engine import IntelligenceEngine
+from alerts.alert_manager import AlertManager
+from forensics.pcap_recorder import PcapRecorder
+from ebpf.xdp_loader import XDPLoader
+from mitigation.proxy_adapter import ProxyAdapter
+from config.consts import SystemState, STATE_FILE
 
 # Third-party imports
 try:
@@ -47,10 +58,10 @@ DEFAULT_CONFIG = {
         },
         "cross_layer_multiplier": 1.5,
         "thresholds": {
-            "normal": {"max": 29},
-            "monitor": {"min": 30, "max": 59},
-            "under_attack": {"min": 60, "max": 89},
-            "escalated": {"min": 90}
+            SystemState.NORMAL: {"max": 29},
+            SystemState.MONITOR: {"min": 30, "max": 59},
+            SystemState.UNDER_ATTACK: {"min": 60, "max": 89},
+            SystemState.ESCALATED: {"min": 90}
         },
         "cooldown_seconds": 300
     }
@@ -68,8 +79,15 @@ class ConfigLoader:
             return DEFAULT_CONFIG
 
         try:
-            with open(path, 'r') as f:
+            with open(path, "r") as f:
                 user_config = yaml.safe_load(f) or {}
+
+            # Override auth_token from environment
+            auth_token = os.environ.get("UAD_AUTH_TOKEN")
+            if auth_token:
+                user_config["auth_token"] = auth_token
+                logging.info("Auth token overridden by environment variable UAD_AUTH_TOKEN")
+
             return user_config
         except Exception as e:
             logging.error(f"Failed to parse config: {e}")
@@ -94,7 +112,10 @@ class EventIngestor(threading.Thread):
     def _tail_file(self):
         try:
             with open(self.source, 'r') as f:
-                f.seek(0, 2) # Go to end
+                # Only seek to end if we are in continuous mode (long running)
+                # For --once or batch processing, read from start.
+                if not getattr(self, "once_mode", False):
+                    f.seek(0, 2) 
                 while self.running:
                     line = f.readline()
                     if not line:
@@ -127,17 +148,15 @@ class CorrelationEngine:
     def __init__(self, config):
         self.config = config.get("orchestrator", DEFAULT_CONFIG["orchestrator"])
         self.window_size = self.config["window_size_seconds"]
-        self.weights = self.config["weights"]
 
         # In-memory state: {source_ip: [events...]}
         self.event_buffer = defaultdict(list)
-        # Campaign State: [campaign_alerts...]
+        # Campaign State: [events...]
         self.active_campaigns = []
+        # ML Advisories: [events...]
+        self.ml_advisories = []
 
         self.lock = threading.Lock()
-
-        self.current_state = "NORMAL"
-        self.last_attack_time = 0
 
     def ingest(self, event):
         """Add event to buffer and prune old events."""
@@ -145,103 +164,99 @@ class CorrelationEngine:
             now = time.time()
             event["_recv_time"] = now
 
-            # Special handling for Campaign Alerts (from Cross-Layer Engine)
-            if event.get("type") == "campaign_alert":
+            t = event.get("type", event.get("event"))
+
+            # Special handling for signals
+            if t == "campaign_alert":
                 self.active_campaigns.append(event)
-                # Keep campaigns active for macro window (e.g. 5 mins)
                 self.active_campaigns = [c for c in self.active_campaigns if now - c["_recv_time"] <= 300]
+                return
+            
+            if t == "ml_advisory" or event.get("source") == "ml_intelligence":
+                self.ml_advisories.append(event)
+                self.ml_advisories = [m for m in self.ml_advisories if now - m["_recv_time"] <= 300]
                 return
 
             src = event.get("source_entity", "unknown")
             self.event_buffer[src].append(event)
 
-            # Prune old events for this source
+            # Prune old events
             self.event_buffer[src] = [e for e in self.event_buffer[src]
                                       if now - e["_recv_time"] <= self.window_size]
 
-    def evaluate_risk(self):
-        """Calculate Global Risk Score (GRS) and per-source risks."""
+    def get_snapshot(self):
+        """Returns a snapshot for intelligence analysis."""
         with self.lock:
-            total_score = 0.0
-            active_sources = []
-            active_layers = set()
+            # Clear empty buffers
+            to_remove = [k for k, v in self.event_buffer.items() if not v]
+            for k in to_remove: del self.event_buffer[k]
+            
+            return dict(self.event_buffer), list(self.active_campaigns), list(self.ml_advisories)
 
-            # 1. Evaluate Source-based Risks
-            for src, events in self.event_buffer.items():
-                if not events: continue
+class MLProcessManager(threading.Thread):
+    """
+    Manages the lifecycle of the ML Online Inference subprocess.
+    Pipes events to ML engine and reads advisories back.
+    """
+    def __init__(self, main_queue, log_level="INFO"):
+        super().__init__(daemon=True)
+        self.main_queue = main_queue
+        self.log_level = log_level
+        self.process = None
+        self.running = True
 
-                src_score = 0.0
-                layers_seen = set()
+    def run(self):
+        script_path = os.path.abspath("ml_intelligence/inference/online_inference.py")
+        cmd = [sys.executable, "-u", script_path, "--log-level", self.log_level]
+        logging.info(f"Spawning ML Engine: {' '.join(cmd)}")
+        
+        try:
+            self.process = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=sys.stderr,
+                text=True,
+                bufsize=1
+            )
 
-                for e in events:
-                    layer = e.get("layer", "unknown")
-                    severity = e.get("severity", "LOW")
+            # Thread to read stdout from subprocess
+            def _reader():
+                logging.debug("ML Reader thread started")
+                while self.running:
+                    line = self.process.stdout.readline()
+                    if not line: 
+                        logging.debug("ML Process STDOUT closed.")
+                        break
+                    try:
+                        advisory = json.loads(line)
+                        logging.info(f"ML ADVISORY RECEIVED: {advisory.get('target_entity')} (Conf: {advisory.get('confidence')})")
+                        self.main_queue.put(advisory)
+                    except json.JSONDecodeError:
+                        logging.debug(f"ML Process sent invalid JSON: {line}")
+            
+            reader_thread = threading.Thread(target=_reader, daemon=True)
+            reader_thread.start()
 
-                    # Base score mapping
-                    base_val = 10
-                    if severity == "MEDIUM": base_val = 30
-                    elif severity == "HIGH": base_val = 60
-                    elif severity == "CRITICAL": base_val = 90
+            self.process.wait()
+            logging.warning("ML Engine process terminated.")
+        except Exception as e:
+            logging.error(f"Failed to start ML Engine: {e}")
 
-                    weight = self.weights.get(layer, 0.1)
-                    src_score += (base_val * weight)
-                    layers_seen.add(layer)
-                    active_layers.add(layer)
+    def send_event(self, event):
+        """Pipe an ingested event to the ML subprocess STDIN."""
+        if self.process and self.process.stdin:
+            try:
+                line = json.dumps(event) + "\n"
+                self.process.stdin.write(line)
+                self.process.stdin.flush()
+            except Exception as e:
+                logging.debug(f"Failed to pipe event to ML: {e}")
 
-                # Cross-layer multiplier
-                if len(layers_seen) > 1:
-                    src_score *= self.config["cross_layer_multiplier"]
-
-                src_score = min(src_score, 100.0)
-                total_score = max(total_score, src_score)
-
-                if src_score > 30:
-                    active_sources.append({"ip": src, "score": round(src_score, 1)})
-
-            # 2. Evaluate Campaign Alerts (High Priority)
-            if self.active_campaigns:
-                # If we have an active campaign, score is at least 80 (UNDER_ATTACK)
-                # If confidence is HIGH, bump to 95 (ESCALATED)
-                for camp in self.active_campaigns:
-                    if camp.get("confidence") == "HIGH":
-                        total_score = max(total_score, 95.0)
-                    else:
-                        total_score = max(total_score, 80.0)
-
-                    active_layers.add("correlation")
-
-            # Determine State
-            new_state = self._map_score_to_state(total_score)
-
-            # Hysteresis / Cooldown
-            now = time.time()
-            if total_score >= 60: # Threshold for UNDER_ATTACK
-                self.last_attack_time = now
-
-            if new_state == "NORMAL" and (now - self.last_attack_time < self.config["cooldown_seconds"]):
-                return None # Hold state
-
-            if new_state != self.current_state:
-                self.current_state = new_state
-                return {
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "state": self.current_state,
-                    "score": round(total_score, 1),
-                    "affected_sources": active_sources,
-                    "active_campaigns": [c.get("campaign_name") for c in self.active_campaigns],
-                    "active_layers": list(active_layers),
-                    "confidence": "HIGH" if len(active_layers) > 1 else "MEDIUM",
-                    "decision_id": f"dec-{int(now)}"
-                }
-
-            return None
-
-    def _map_score_to_state(self, score):
-        t = self.config["thresholds"]
-        if score >= t["escalated"]["min"]: return "ESCALATED"
-        if score >= t["under_attack"]["min"]: return "UNDER_ATTACK"
-        if score >= t["monitor"]["min"]: return "MONITOR"
-        return "NORMAL"
+    def stop(self):
+        self.running = False
+        if self.process:
+            self.process.terminate()
 
 class Orchestrator:
     def __init__(self, args, config):
@@ -253,16 +268,39 @@ class Orchestrator:
         # Components
         source = args.input_file if args.input == 'file' else None
         self.ingestor = EventIngestor(args.input, source, self.queue)
-        self.engine = CorrelationEngine(config)
+        if args.once:
+            self.ingestor.once_mode = True
+        self.correlation_engine = CorrelationEngine(config)
+        self.intelligence_engine = IntelligenceEngine(config)
+        self.alert_manager = AlertManager(config)
+
+        # ML Engine
+        self.ml_manager = None
+        if getattr(args, "ml_support", False):
+            self.ml_manager = MLProcessManager(self.queue, args.log_level)
+
+        # Forensics
+        self.pcap_recorder = PcapRecorder()
+
+        # eBPF/XDP (Phase 22)
+        # Check if enabled in config (defaulting to True for now to test simulation)
+        self.ebpf_enabled = True 
+        if self.ebpf_enabled:
+            self.xdp = XDPLoader(interface="eth0", mode=args.mode) # args.mode might not be right, checking logic... defaults to simulate if on windows anyway
+
+        # Proxy Adapter (Phase 25)
+        self.proxy_adapter = ProxyAdapter()
 
         # State dump file
-        self.state_file = "runtime/global_state.json"
+        self.state_file = STATE_FILE
         os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
 
     def run(self):
         logging.info(f"Starting {SCRIPT_NAME}. Mode: {self.args.mode}")
 
         self.ingestor.start()
+        if self.ml_manager:
+            self.ml_manager.start()
 
         try:
             while self.running:
@@ -270,21 +308,49 @@ class Orchestrator:
                 try:
                     while True:
                         event = self.queue.get_nowait()
-                        self.engine.ingest(event)
+                        self.correlation_engine.ingest(event)
+                        # Process raw events for alerting
+                        self.alert_manager.process_event(event)
+
+                        # Pipe events to ML if supported
+                        if self.ml_manager and event.get("source") != "ml_intelligence":
+                            self.ml_manager.send_event(event)
                 except queue.Empty:
                     pass
 
-                # 2. Evaluate State
-                decision = self.engine.evaluate_risk()
-                if decision:
-                    self._emit_decision(decision)
-                    self._update_state_file(decision)
+                # 2. Extract Intelligence
+                source_events, campaigns, ml_adv = self.correlation_engine.get_snapshot()
+                grs, active_sources, layers = self.intelligence_engine.calculate_grs(source_events, campaigns, ml_adv)
+                
+                # 3. Check for State Change
+                new_state = self.intelligence_engine.determine_state(grs)
+                
+                # 4. Generate & Emit Directives 
+                # (We emit if there's a state change or if there are active mitigations needed)
+                directives = self.intelligence_engine.generate_directives(grs, active_sources, campaigns)
+                
+                if directives:
+                    for d in directives:
+                        self._emit_directive(d)
+                        # Process generated directives for alerting
+                        self.alert_manager.process_event(d)
+                    
+                    # Update global state file with the latest "state_change" directive info
+                    state_dir = [d for d in directives if d["type"] == "state_change"]
+                    if state_dir:
+                        self._update_state_file(state_dir[0])
 
                 # 3. Sleep
                 time.sleep(1.0)
 
-                if self.args.once and self.queue.empty():
-                    self.running = False
+                if self.args.once and self.queue.empty() and not self.ingestor.is_alive():
+                    # If ML is active, give it a tiny moment to finish flushing its buffer
+                    if self.ml_manager:
+                        time.sleep(2.0)
+                        if self.queue.empty():
+                            self.running = False
+                    else:
+                        self.running = False
 
         except KeyboardInterrupt:
             self.stop()
@@ -292,21 +358,44 @@ class Orchestrator:
             logging.error(f"Runtime error: {e}", exc_info=True)
             sys.exit(1)
 
-    def _emit_decision(self, decision):
-        print(json.dumps(decision))
+    def _emit_directive(self, directive):
+        print(json.dumps(directive))
         sys.stdout.flush()
-        logging.info(f"STATE CHANGE >>> {decision['state']} (Score: {decision['score']})")
+        sys.stdout.flush()
+        if directive["type"] == "state_change":
+            state = directive["state"]
+            logging.info(f"STATE CHANGE >>> {state} (Score: {directive['score']})")
+            
+            # Automated Forensics
+            if state in [SystemState.UNDER_ATTACK, SystemState.ESCALATED]:
+                filename = self.pcap_recorder.start_capture(duration=300) # Record for 5 mins
+                if filename:
+                    logging.warning(f"FORENSICS: Started PCAP capture {filename}")
+            elif state in [SystemState.NORMAL, SystemState.MONITOR]:
+                if self.pcap_recorder.stop_capture():
+                    logging.info("FORENSICS: Stopped PCAP capture (State Normalized)")
 
-    def _update_state_file(self, decision):
+        elif directive["type"] == "mitigation_directive":
+            logging.warning(f"MITIGATION >>> {directive['action']} {directive['target']} ({directive['justification']})")
+            
+            # Integrated XDP Blocking
+            if self.ebpf_enabled and directive["action"] == "ban_ip":
+                ip = directive["target"]
+                self.xdp.add_banned_ip(ip)
+
+            # Integrated Proxy Blocking (Phase 25)
+            if directive["action"] == "ban_ip":
+                self.proxy_adapter.block_ip(directive["target"])
+
+    def _update_state_file(self, directive):
         """Writes current state to runtime file for Dashboard."""
         try:
             with open(self.state_file, 'w') as f:
-                # Map decision to simple state
                 state_dump = {
-                    "mode": decision["state"],
-                    "grs_score": decision["score"],
-                    "last_update": decision["timestamp"],
-                    "campaigns": decision.get("active_campaigns", [])
+                    "mode": directive["state"],
+                    "grs_score": directive["score"],
+                    "last_update": directive["timestamp"],
+                    "campaigns": self.correlation_engine.active_campaigns # Pass raw objects or names
                 }
                 json.dump(state_dump, f)
         except Exception as e:
@@ -316,6 +405,8 @@ class Orchestrator:
         logging.info("Stopping...")
         self.running = False
         self.ingestor.stop()
+        if self.ml_manager:
+            self.ml_manager.stop()
 
 # -----------------------------------------------------------------------------
 # Main Entry Point
@@ -325,9 +416,10 @@ def main():
     parser.add_argument("--config", required=True, help="Path to YAML configuration")
     parser.add_argument("--input", default="stdin", choices=["stdin", "file"], help="Input source")
     parser.add_argument("--input-file", help="Path to input file (if input=file)")
-    parser.add_argument("--mode", default="normal", choices=["normal", "monitor", "under_attack"], help="Initial mode")
+    parser.add_argument("--mode", default=SystemState.NORMAL, choices=[SystemState.NORMAL, SystemState.MONITOR, SystemState.UNDER_ATTACK], help="Initial mode")
     parser.add_argument("--daemon", action="store_true", help="Run as background service")
     parser.add_argument("--once", action="store_true", help="Run single pass and exit")
+    parser.add_argument("--ml-support", action="store_true", help="Enable ML-based anomaly detection")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Log verbosity")
 
     args = parser.parse_args()

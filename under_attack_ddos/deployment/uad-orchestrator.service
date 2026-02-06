@@ -1,0 +1,26 @@
+[Unit]
+Description=Under Attack Orchestrator
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+User=uad-orch
+Group=uad-core
+WorkingDirectory=/opt/uad
+ExecStart=/opt/uad/.venv/bin/python3 -u orchestration/under_attack_orchestrator.py --config config/orchestrator.yaml --input file --input-file /opt/uad/runtime/events.jsonl --log-level INFO
+# Hardening
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+DevicePolicy=closed
+ReadOnlyPaths=/opt/uad/orchestration /opt/uad/intelligence /opt/uad/config
+ReadWritePaths=/opt/uad/runtime /var/log/uad
+
+# Restart Logic
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -212,7 +212,7 @@ def main():
 
     monitor = GenericGameMonitor(config_path, args.interface, args.port, args.dry_run)
 
-    if os.geteuid() != 0:
+    if sys.platform != "win32" and os.geteuid() != 0:
         logging.warning("Not running as root. Sniffing might fail.")
 
     monitor.run()
