@@ -235,11 +235,10 @@ class MLProcessManager(threading.Thread):
         if self.process and self.process.stdin:
             try:
                 line = json.dumps(event) + "\n"
-                print(f"DEBUG: Orchestrator sending event for {event.get('source_entity')}", file=sys.stderr)
                 self.process.stdin.write(line)
                 self.process.stdin.flush()
             except Exception as e:
-                print(f"ERROR: Failed to pipe event to ML: {e}", file=sys.stderr)
+                logging.debug(f"Failed to pipe event to ML: {e}")
 
     def stop(self):
         self.running = False
