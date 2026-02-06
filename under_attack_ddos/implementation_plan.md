@@ -596,3 +596,36 @@ Implement a comprehensive suite of hardening features across all layers (L3, L4,
 - Simulate specific packets (e.g., Bad Window Size, Wrong Magic Bytes).
 - Assert they are flagged/dropped.
 
+
+[2026-02-06] PHASE 25 PLAN: Reverse Proxy Integration
+
+## Goal
+Enable the Orchestrator to enforce mitigation rules (IP Blocking) at the Layer 7 Reverse Proxy (Nginx) level, effectively turning it into an application firewall.
+
+## Proposed Changes
+
+###  Configuration Templates
+1.  **web_security/nginx_format.conf**: Define JSON log format for ingestion.
+2.  **web_security/blocklist_template.conf**: A simple structure for \deny <ip>;\.
+
+###  Mitigation Layer
+3.  **mitigation/proxy_adapter.py**:
+    -   Class: \ProxyAdapter\.
+    -   Responsibility: Manage dynamic_denylist.conf.
+    -   Method \lock_ip(ip)\: Appends IP to the list and reloads Nginx.
+    -   Method \eload()\: Executes system command to reload proxy (with validation).
+
+###  Orchestrator
+4.  **orchestration/under_attack_orchestrator.py**:
+    -   Initialize \ProxyAdapter\.
+    -   In \_emit_directive\: Call \proxy.block_ip(target)\ when action is 'ban_ip'.
+
+## Verification Plan
+1.  **Unit Tests**: 	est_suite/proxy_adapter_test.py.
+    -   Mock subprocess.run to verify reload commands.
+    -   Mock file I/O to verify config generation.
+2.  **Simulation**:
+    -   Run Orchestrator in 'monitor' mode.
+    -   Trigger manual alert.
+    -   Check if \web_security/dynamic_denylist.conf\ is created/updated.
+

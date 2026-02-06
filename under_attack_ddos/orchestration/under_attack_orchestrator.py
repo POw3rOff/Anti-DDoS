@@ -26,7 +26,9 @@ from alerts.alert_manager import AlertManager
 # Ensure project root is in path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from forensics.pcap_recorder import PcapRecorder
+from forensics.pcap_recorder import PcapRecorder
 from ebpf.xdp_loader import XDPLoader
+from mitigation.proxy_adapter import ProxyAdapter
 
 # Third-party imports
 try:
@@ -280,6 +282,9 @@ class Orchestrator:
         if self.ebpf_enabled:
             self.xdp = XDPLoader(interface="eth0", mode=args.mode) # args.mode might not be right, checking logic... defaults to simulate if on windows anyway
 
+        # Proxy Adapter (Phase 25)
+        self.proxy_adapter = ProxyAdapter()
+
         # State dump file
         self.state_file = "runtime/global_state.json"
         os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
@@ -371,6 +376,10 @@ class Orchestrator:
             if self.ebpf_enabled and directive["action"] == "ban_ip":
                 ip = directive["target"]
                 self.xdp.add_banned_ip(ip)
+
+            # Integrated Proxy Blocking (Phase 25)
+            if directive["action"] == "ban_ip":
+                self.proxy_adapter.block_ip(directive["target"])
 
     def _update_state_file(self, directive):
         """Writes current state to runtime file for Dashboard."""

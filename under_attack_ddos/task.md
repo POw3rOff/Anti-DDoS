@@ -354,3 +354,24 @@ Notes: Implemented comprehensive hardening suite (8 modules). Verified with test
 - [x] Game: Protocol Deep Inspection <!-- id: 112 -->
 - [x] Game: Vip Player Whitelisting <!-- id: 113 -->
 
+
+[2026-02-06] STATUS UPDATE
+Reference: Phase 25: Reverse Proxy Integration
+New Status: PLANNED
+Notes: Integrating Nginx/Proxy control based on PROXY_INTEGRATION_DESIGN.md.
+
+- [ ] Create Nginx Config Templates (web_security/) <!-- id: 114 -->
+- [ ] Implement ProxyAdapter (mitigation/proxy_adapter.py) <!-- id: 115 -->
+- [ ] Integrate ProxyAdapter into Orchestrator <!-- id: 116 -->
+- [ ] Verify Proxy Configuration Updates <!-- id: 117 -->
+
+
+[2026-02-06] STATUS UPDATE
+Reference: Phase 25: Reverse Proxy Integration
+New Status: IN_PROGRESS
+Notes: Creating config templates and python adapter.
+
+- [/] Create Nginx Config Templates (web_security/) <!-- id: 114 -->
+- [/] Implement ProxyAdapter (mitigation/proxy_adapter.py) <!-- id: 115 -->
+- [ ] Integrate ProxyAdapter into Orchestrator <!-- id: 116 -->
+
