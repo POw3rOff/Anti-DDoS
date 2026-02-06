@@ -1,133 +1,299 @@
-
 :root {
-    --bg-color: #0d0d0d;
-    --card-bg: #1a1a1a;
+    --bg-color: #050505;
+    --card-bg: rgba(20, 20, 30, 0.6);
+    --card-border: 1px solid rgba(0, 255, 65, 0.2);
     --text-color: #e0e0e0;
-    --accent-green: #00ff41;
-    --accent-red: #ff3333;
-    --accent-blue: #0088ff;
-    --border-color: #333;
+    --text-muted: #888;
+
+    --neon-green: #00ff41;
+    --neon-green-glow: 0 0 10px rgba(0, 255, 65, 0.5);
+
+    --neon-red: #ff3333;
+    --neon-red-glow: 0 0 15px rgba(255, 51, 51, 0.7);
+
+    --neon-blue: #0088ff;
+
+    --font-mono: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 body {
     background-color: var(--bg-color);
+    background-image:
+        linear-gradient(rgba(0, 20, 0, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 20, 0, 0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
     color: var(--text-color);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     margin: 0;
     padding: 20px;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+}
+
+/* CRT Scanline Effect */
+body::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background-size: 100% 2px, 2px 100%;
+    pointer-events: none;
+    z-index: 999;
 }
 
 .container {
-    max-width: 1400px;
+    max-width: 1600px;
     margin: 0 auto;
+    height: 95vh;
+    display: flex;
+    flex-direction: column;
 }
 
 header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid var(--border-color);
-    padding-bottom: 20px;
-    margin-bottom: 20px;
+    border-bottom: 1px solid var(--neon-green);
+    padding-bottom: 15px;
+    margin-bottom: 25px;
+    box-shadow: var(--neon-green-glow);
 }
 
 .logo {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: var(--accent-green);
-    text-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--neon-green);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    text-shadow: var(--neon-green-glow);
 }
 
 .status-indicator {
-    padding: 5px 10px;
-    border-radius: 4px;
-    background: #333;
-    font-size: 0.8rem;
+    padding: 8px 16px;
+    border: 1px solid var(--neon-red);
+    color: var(--neon-red);
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    background: rgba(255, 0, 0, 0.1);
+    box-shadow: var(--neon-red-glow);
+    transition: all 0.3s ease;
 }
 
 .status-indicator.online {
-    background: var(--accent-green);
-    color: #000;
+    border-color: var(--neon-green);
+    color: var(--neon-green);
+    background: rgba(0, 255, 65, 0.1);
+    box-shadow: var(--neon-green-glow);
 }
 
+/* Grid Layout */
 .grid {
     display: grid;
-    grid-template-columns: 1fr 2fr;
-    grid-template-rows: auto auto;
-    gap: 20px;
+    grid-template-columns: 350px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 25px;
+    flex: 1;
 }
 
 .card {
     background: var(--card-bg);
-    border: 1px solid var(--border-color);
-    padding: 20px;
-    border-radius: 4px;
+    border: var(--card-border);
+    backdrop-filter: blur(5px);
+    padding: 25px;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    border-color: var(--neon-green);
 }
 
 h2 {
     margin-top: 0;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding-bottom: 10px;
-    font-size: 1rem;
-    color: #888;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* Status Panel */
+.status-card {
+    grid-row: 1 / span 2;
+    display: flex;
+    flex-direction: column;
 }
 
 .big-stat {
-    font-size: 3rem;
-    font-weight: bold;
-    margin: 20px 0;
+    font-size: 3.5rem;
+    font-weight: 700;
+    margin: 30px 0;
     text-align: center;
+    text-shadow: 0 0 20px currentColor;
 }
 
-.mode-normal { color: var(--accent-green); }
-.mode-monitor { color: var(--accent-blue); }
-.mode-elevated { color: orange; }
-.mode-escalated { color: var(--accent-red); animation: pulse 1s infinite; }
-
-@keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
+.mode-normal {
+    color: var(--neon-green);
 }
 
-.btn {
-    width: 100%;
-    padding: 15px;
-    border: none;
-    cursor: pointer;
-    font-family: inherit;
+.mode-monitor {
+    color: var(--neon-blue);
+}
+
+.mode-escalated {
+    color: var(--neon-red);
+    animation: text-flicker 2s infinite;
+}
+
+@keyframes text-flicker {
+    0% {
+        opacity: 1;
+    }
+
+    5% {
+        opacity: 0.3;
+    }
+
+    10% {
+        opacity: 1;
+    }
+
+    15% {
+        opacity: 1;
+    }
+
+    20% {
+        opacity: 0.1;
+    }
+
+    25% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+.stat-row {
+    font-size: 1.2rem;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    border-bottom: 1px dashed #333;
+    padding-bottom: 10px;
+}
+
+#grs-display {
     font-weight: bold;
-    margin-top: 20px;
-    transition: 0.2s;
+    color: var(--text-color);
 }
 
-.btn-danger {
-    background: #330000;
-    color: var(--accent-red);
-    border: 1px solid var(--accent-red);
+/* Panic Button */
+.btn-panic {
+    margin-top: auto;
+    padding: 20px;
+    background: transparent;
+    border: 2px solid var(--neon-red);
+    color: var(--neon-red);
+    font-family: var(--font-mono);
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: inset 0 0 20px rgba(255, 0, 0, 0.2);
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
 }
 
-.btn-danger:hover {
-    background: var(--accent-red);
-    color: #fff;
+.btn-panic:hover {
+    background: var(--neon-red);
+    color: #000;
+    box-shadow: 0 0 30px var(--neon-red);
 }
 
+.btn-panic::before {
+    content: "⚠️";
+    margin-right: 10px;
+}
+
+/* Map */
 .map-card {
     grid-column: 2;
-    grid-row: 1 / span 2;
     min-height: 400px;
+    border: 1px solid var(--neon-blue);
+    box-shadow: 0 0 10px rgba(0, 136, 255, 0.2);
 }
 
 .map-placeholder {
     height: 100%;
+    background: radial-gradient(circle at center, #1a2a3a 0%, #050505 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #000;
-    color: #333;
+    position: relative;
 }
 
-canvas {
-    width: 100%;
-    height: 200px;
+/* Add a fake world map grid effect */
+.map-placeholder::before {
+    content: "Scanning Global Threat Vectors...";
+    color: var(--neon-blue);
+    animation: pulse 2s infinite;
+}
+
+/* Charts */
+.stats-card {
+    grid-column: 2;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+/* Campaigns */
+.campaigns-card {
+    grid-column: 1;
+    grid-row: 3;
+    grid-column: span 2;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+li {
+    padding: 10px;
+    border-left: 3px solid var(--neon-green);
+    background: rgba(0, 255, 65, 0.05);
+    margin-bottom: 5px;
+    font-size: 0.9rem;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #111;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #333;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--neon-green);
 }

@@ -1,53 +1,83 @@
-
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UAD War Room</title>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <title>UAD // WAR ROOM</title>
+    <!-- Premium Mono Font -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/style.css">
-    <!-- Chart.js for graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
     <div class="container">
         <header>
-            <div class="logo">🛡️ UNDER ATTACK DEFENSE</div>
-            <div id="connection-status" class="status-indicator">OFFLINE</div>
+            <div class="logo">
+                <span style="color: #fff;">//</span> UAD_ORCHESTRATOR
+                <span
+                    style="font-size: 0.8rem; vertical-align: middle; margin-left:10px; color:#666;">v2.0.0-EBPF</span>
+            </div>
+            <div id="connection-status" class="status-indicator">SYSTEM OFFLINE</div>
         </header>
 
         <div class="grid">
-            <!-- Global Status Panel -->
+            <!-- Left Panel: Status & Control -->
             <div class="card status-card" id="status-panel">
-                <h2>DEFENSE MATRIX</h2>
-                <div class="big-stat" id="mode-display">LOADING...</div>
+                <h2>
+                    SYSTEM STATUS
+                    <span style="font-size: 0.7em; opacity: 0.7">● LIVE</span>
+                </h2>
+
+                <div class="big-stat" id="mode-display">INITIALIZING</div>
+
                 <div class="stat-row">
-                    <span>Global Risk Score:</span>
+                    <span>GLOBAL RISK SCORE</span>
                     <span id="grs-display">0</span>
                 </div>
-                <button id="panic-btn" class="btn btn-danger">⚠️ ACTIVATE PANIC MODE</button>
+
+                <div class="stat-row">
+                    <span>ACTIVE RULES</span>
+                    <span>14,203</span>
+                </div>
+
+                <div class="stat-row">
+                    <span>EBPF MAPS</span>
+                    <span style="color: var(--neon-green)">PINNED</span>
+                </div>
+
+                <button id="panic-btn" class="btn-panic">
+                    INITIATE LOCKDOWN
+                </button>
             </div>
 
-            <!-- Attack Map (Placeholder for now) -->
+            <!-- Right Panel: Map & Viz -->
             <div class="card map-card">
-                <h2>LIVE THREAT MAP</h2>
-                <div id="map-container">
-                    <div class="map-placeholder">[ GEOIP ATTACK ORIGINS ]</div>
+                <h2>THREAT INTELLIGENCE MAP</h2>
+                <div class="map-placeholder">
+                    <!-- Map lib would render here -->
+                    <div style="text-align:center;">
+                        <div style="font-size: 3rem; margin-bottom: 20px;">🌐</div>
+                        <div id="geo-status">[ WAITING FOR GEO-TELEMETRY ]</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Live Stats -->
+            <!-- Bottom Panel: Throughput -->
             <div class="card stats-card">
-                <h2>THROUGHPUT (PPS)</h2>
-                <canvas id="trafficChart"></canvas>
+                <h2>NETWORK TELEMETRY (L3/L4)</h2>
+                <div style="height: 250px; position: relative; width: 100%">
+                    <canvas id="trafficChart"></canvas>
+                </div>
             </div>
 
-            <!-- Active Campaigns -->
+            <!-- Full Width: Alerts/Campaigns -->
             <div class="card campaigns-card">
-                <h2>ACTIVE CAMPAIGNS</h2>
+                <h2>ACTIVE CAMPAIGNS & ALERTS</h2>
                 <ul id="campaign-list">
-                    <li>No active threats detected.</li>
+                    <li style="border-left-color: #555; background: rgba(255,255,255,0.05);">System initialize. Waiting
+                        for log stream...</li>
                 </ul>
             </div>
         </div>
@@ -55,4 +85,5 @@
 
     <script src="/static/js/app.js"></script>
 </body>
+
 </html>
