@@ -16,6 +16,10 @@ import signal
 from collections import defaultdict
 from datetime import datetime, timezone
 
+# Ensure project root is in path
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from intelligence.enrichment import GeoIPEnricher
+
 # Third-party imports (assumed available in production environment)
 try:
     import yaml
@@ -83,6 +87,7 @@ class IPFloodAnalyzer:
         else:
             self.pps_threshold = l3_conf.get("normal", 1000)
 
+        self.enricher = GeoIPEnricher()
         logging.info(f"Initialized {SCRIPT_NAME}. Mode: {args.mode}. PPS Threshold: {self.pps_threshold}")
 
     def packet_callback(self, packet):
@@ -115,6 +120,14 @@ class IPFloodAnalyzer:
                         "duration": round(duration, 2)
                     }
                 }
+                
+                # Enrichment
+                enrichment = self.enricher.enrich(ip)
+                if enrichment.get("country") != "Unknown":
+                    event["context"] = enrichment
+                    country_tag = f" [{enrichment.get('country')} {enrichment.get('asn')}]"
+                else:
+                    country_tag = ""
 
                 # Dry-run check
                 if self.args.dry_run:
@@ -131,7 +144,9 @@ class IPFloodAnalyzer:
                 print(json.dumps(e))
         elif events:
             for e in events:
-                logging.warning(f"ALERT: {e['event']} from {e['source_entity']} (PPS: {e['data']['pps_observed']})")
+                ctx = e.get("context", {})
+                tag = f" [{ctx.get('country')} {ctx.get('asn')}]" if ctx else ""
+                logging.warning(f"ALERT: {e['event']} from {e['source_entity']}{tag} (PPS: {e['data']['pps_observed']})")
 
         # Reset counters for next window
         self.packet_counts.clear()

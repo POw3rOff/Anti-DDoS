@@ -16,6 +16,10 @@ import signal
 from collections import defaultdict
 from datetime import datetime, timezone
 
+# Ensure project root is in path
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from intelligence.enrichment import GeoIPEnricher
+
 # Third-party imports
 try:
     import yaml
@@ -80,6 +84,7 @@ class SynFloodAnalyzer:
         else:
             self.pps_threshold = base_pps
 
+        self.enricher = GeoIPEnricher()
         logging.info(f"Initialized {SCRIPT_NAME}. Mode: {args.mode}. SYN Threshold: {self.pps_threshold} PPS")
 
     def packet_callback(self, packet):
@@ -125,6 +130,14 @@ class SynFloodAnalyzer:
                         "duration": round(duration, 2)
                     }
                 }
+                
+                # Enrichment
+                enrichment = self.enricher.enrich(ip)
+                if enrichment.get("country") != "Unknown":
+                    event["context"] = enrichment
+                    country_tag = f" [{enrichment.get('country')} {enrichment.get('asn')}]"
+                else:
+                    country_tag = ""
 
                 if self.args.dry_run:
                     event["status"] = "simulated"
@@ -140,7 +153,9 @@ class SynFloodAnalyzer:
                 print(json.dumps(e))
         elif events:
             for e in events:
-                logging.warning(f"ALERT: {e['event']} from {e['source_entity']} (PPS: {e['data']['syn_rate_pps']})")
+                ctx = e.get("context", {})
+                tag = f" [{ctx.get('country')} {ctx.get('asn')}]" if ctx else ""
+                logging.warning(f"ALERT: {e['event']} from {e['source_entity']}{tag} (PPS: {e['data']['syn_rate_pps']})")
 
         # Reset counters
         self.syn_counts.clear()

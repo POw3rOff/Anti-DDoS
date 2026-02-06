@@ -406,3 +406,43 @@ Enrich system alerts and logs with Geographical (Country, City) and Network (ASN
     - Run python uad.py lookup 8.8.8.8.
     - Verify output (either Real data if DB present, or 'GeoIP module not available/DB missing' warning).
 
+
+# Phase 18: Ubiquitous GeoIP Enrichment
+
+## Goal
+Ensure that detection events from ALL layers (L3, L4, Game) include Geographical and ASN context immediately upon emission. This satisfies the requirement for 'Enrichment in all layers'.
+
+## Proposed Changes
+
+### 1. Game Layer (Common Base)
+- **[MODIFY] [layer_game/common/game_protocol_parser.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer_game/common/game_protocol_parser.py)**:
+    - Initialize GeoIPEnricher in __init__.
+    - In emit_event(src_ip, ...), call enrich(src_ip).
+    - Append {'context': enrichment_data} to the event payload.
+    - Log the country code in the logging.warning message (e.g., ALERT: flood from 1.2.3.4 [CN]).
+
+### 2. Layer 3 (IP Flood)
+- **[MODIFY] [layer3/ip_flood_analyzer.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer3/ip_flood_analyzer.py)**:
+    - Initialize GeoIPEnricher.
+    - In analyze_window, enrich the source IP before constructing the event.
+    - Add context to JSON event and standard log.
+
+### 3. Layer 4 (SYN Flood)
+- **[MODIFY] [layer4/syn_flood_analyzer.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/layer4/syn_flood_analyzer.py)**:
+    - Similar update: Enrich IP logic in analyze_window.
+
+## Verification Plan
+
+### Automated Tests
+- **[NEW] [enrichment_integration_test.py](file:///c:/Users/valet/Desktop/Anti-DDoS/under_attack_ddos/test_suite/enrichment_integration_test.py)**:
+    - Extends the existing verify_game_monitors.py approach.
+    - Mocks GeoIPEnricher to return fixed data (e.g., 'CN', 'AS1234').
+    - Instantiates GameProtocolParser and Analyzers.
+    - Triggers an event and asserts that the output JSON contains the context key with expected data.
+
+### Manual Verification
+1.  **L3 Test**:
+    - Run python layer3/ip_flood_analyzer.py --config config/thresholds.yaml --mode monitor --dry-run.
+    - Generate traffic (or mock packet).
+    - Check logs for [XX] country code.
+

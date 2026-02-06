@@ -15,6 +15,10 @@ import yaml
 import abc
 from datetime import datetime, timezone
 
+# Ensure project root is in path for imports
+sys.path.append(os.path.join(os.path.dirname(__file__), "../../"))
+from intelligence.enrichment import GeoIPEnricher
+
 class GameProtocolParser(abc.ABC):
     def __init__(self, script_name, game_name, config_path=None, dry_run=False):
         self.script_name = script_name
@@ -23,6 +27,7 @@ class GameProtocolParser(abc.ABC):
 
         self._setup_logging()
         self.config = self._load_config(config_path)
+        self.enricher = GeoIPEnricher()
 
         logging.info(f"Initialized {self.script_name} for {self.game_name}. Dry-run: {self.dry_run}")
 
@@ -63,6 +68,14 @@ class GameProtocolParser(abc.ABC):
         if "status" not in data:
             data["status"] = "simulated" if self.dry_run else "active"
 
+        # Enrich Context
+        enrichment = self.enricher.enrich(src_ip)
+        if enrichment.get("country") != "Unknown":
+            data["context"] = enrichment
+            country_tag = f" [{enrichment.get('country')} {enrichment.get('asn')}]"
+        else:
+            country_tag = ""
+
         event = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "layer": "game",
@@ -76,7 +89,7 @@ class GameProtocolParser(abc.ABC):
         try:
             print(json.dumps(event))
             sys.stdout.flush()
-            logging.warning(f"ALERT: {event_type} from {src_ip} (Severity: {severity})")
+            logging.warning(f"ALERT: {event_type} from {src_ip}{country_tag} (Severity: {severity})")
         except BrokenPipeError:
             # Handle broken pipe if stdout is closed (e.g. orchestrator died)
             sys.stderr.write("Broken pipe while emitting event.\n")
