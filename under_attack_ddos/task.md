@@ -227,3 +227,25 @@ Reference: Phase 19: War Room Web UI
 
 - [x] Enhance Frontend UI (Cyber/Glassmorphism) <!-- id: 90 -->
 
+
+[2026-02-06] STATUS UPDATE
+Reference: Phase 20: Configurable Rate Limiting
+•New Status: COMPLETED
+•Notes: Added 'Config' button to UI. Analyzers now watch thresholds.yaml for changes.
+
+- [x] Implement ConfigManager in Backend <!-- id: 91 -->
+- [x] Add config_hot_reload logic to Analyzers <!-- id: 92 -->
+- [x] Create Settings UI in Dashboard <!-- id: 93 -->
+- [x] Verify Hot Reloading <!-- id: 94 -->
+
+
+[2026-02-06] STATUS UPDATE
+Reference: Phase 21: PCAP Forensics
+•New Status: IN_PROGRESS
+•Notes: Backend logic and API complete. Updating Frontend UI.
+
+- [x] Create forensics/pcap_recorder.py <!-- id: 95 -->
+- [x] Integrate PCAP trigger into Orchestrator <!-- id: 96 -->
+- [x] Add Download API to Dashboard <!-- id: 97 -->
+- [ ] Verify Capture Logic <!-- id: 98 -->
+

@@ -23,6 +23,10 @@ from datetime import datetime, timezone
 from intelligence.intelligence_engine import IntelligenceEngine
 from alerts.alert_manager import AlertManager
 
+# Ensure project root is in path
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+from forensics.pcap_recorder import PcapRecorder
+
 # Third-party imports
 try:
     import yaml
@@ -266,6 +270,9 @@ class Orchestrator:
         if getattr(args, "ml_support", False):
             self.ml_manager = MLProcessManager(self.queue, args.log_level)
 
+        # Forensics
+        self.pcap_recorder = PcapRecorder()
+
         # State dump file
         self.state_file = "runtime/global_state.json"
         os.makedirs(os.path.dirname(self.state_file), exist_ok=True)
@@ -336,8 +343,20 @@ class Orchestrator:
     def _emit_directive(self, directive):
         print(json.dumps(directive))
         sys.stdout.flush()
+        sys.stdout.flush()
         if directive["type"] == "state_change":
-            logging.info(f"STATE CHANGE >>> {directive['state']} (Score: {directive['score']})")
+            state = directive["state"]
+            logging.info(f"STATE CHANGE >>> {state} (Score: {directive['score']})")
+            
+            # Automated Forensics
+            if state in ["UNDER_ATTACK", "ESCALATED"]:
+                filename = self.pcap_recorder.start_capture(duration=300) # Record for 5 mins
+                if filename:
+                    logging.warning(f"FORENSICS: Started PCAP capture {filename}")
+            elif state in ["NORMAL", "MONITOR"]:
+                if self.pcap_recorder.stop_capture():
+                    logging.info("FORENSICS: Stopped PCAP capture (State Normalized)")
+
         elif directive["type"] == "mitigation_directive":
             logging.warning(f"MITIGATION >>> {directive['action']} {directive['target']} ({directive['justification']})")
 

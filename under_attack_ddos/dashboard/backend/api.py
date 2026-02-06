@@ -3,6 +3,7 @@ import json
 import os
 import time
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from dashboard.backend.config_manager import ConfigManager
 
@@ -11,6 +12,7 @@ router = APIRouter()
 STATE_FILE = os.path.join(os.path.dirname(__file__), "../../runtime/global_state.json")
 LOCK_FILE = os.path.join(os.path.dirname(__file__), "../../runtime/OVERRIDE.lock")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../../config/thresholds.yaml")
+CAPTURES_DIR = os.path.join(os.path.dirname(__file__), "../../data/captures")
 
 config_manager = ConfigManager(CONFIG_PATH)
 

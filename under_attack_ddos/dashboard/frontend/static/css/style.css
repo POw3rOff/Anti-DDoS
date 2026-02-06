@@ -402,3 +402,53 @@ li {
     margin-left: 10px;
     color: #666;
 }
+/* Refactored Utility Classes */
+.slash-prefix {
+    color: #fff;
+}
+
+.status-badge-live {
+    font-size: 0.7em;
+    opacity: 0.7;
+}
+
+.text-neon-green {
+    color: var(--neon-green);
+}
+
+.map-placeholder-content {
+    text-align: center;
+}
+
+.map-icon-large {
+    font-size: 3rem;
+    margin-bottom: 20px;
+}
+
+.chart-container-responsive {
+    height: 250px;
+    position: relative;
+    width: 100%;
+}
+
+.list-item-loading {
+    border-left-color: #555;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+
+/* New Components Refactor */
+.header-controls {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.forensics-card {
+    grid-column: 1 / -1;
+}
+
+.no-captures-text {
+    color: #666;
+}
+

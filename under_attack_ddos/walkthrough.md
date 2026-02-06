@@ -233,3 +233,18 @@ Implemented a premium 'Cyber/Sci-Fi' visual theme for the War Room:
 *   **Layout**: CSS Grid based responsive layout.
 *   **Effects**: Glassmorphism transparency on cards, glowing text shadows, animated panic states.
 
+
+[2026-02-06] PHASE 20 VERIFICATION RESULTS
+
+## Configurable Rate Limiting
+Implemented a full-stack configuration editor:
+*   **Frontend**: A new 'Settings' modal in the dashboard allows editing 	hresholds.yaml in real-time.
+*   **Backend**: pi.py exposes secure read/write endpoints for the configuration.
+*   **Hot-Reload**: ip_flood_analyzer.py and syn_flood_analyzer.py now monitor the file modification time of 	hresholds.yaml. If it changes, they reload the values instantly without dropping packets.
+
+## Verification
+*   **Manual Test**: Opened dashboard, changed L3 PPS threshold from 1000 -> 500, saved. Verified that the backend process picked up the file change and logged 'Configuration Reloaded'.
+*   **Result**: Success.
+
+Status: **COMPLETED**
+

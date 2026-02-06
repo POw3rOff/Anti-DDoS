@@ -16,11 +16,13 @@
     <div class="container">
         <header>
             <div class="logo">
-                <span style="color: #fff;">//</span> UAD_ORCHESTRATOR
-                <span
-                    style="font-size: 0.8rem; vertical-align: middle; margin-left:10px; color:#666;">v2.0.0-EBPF</span>
+                <span class="slash-prefix">//</span> UAD_ORCHESTRATOR
+                <span class="version-tag">v2.0.0-EBPF</span>
             </div>
-            <div id="connection-status" class="status-indicator">SYSTEM OFFLINE</div>
+            <div class="header-controls">
+                <button id="settings-btn" class="btn-icon">⚙️ CONFIG</button>
+                <div id="connection-status" class="status-indicator">SYSTEM OFFLINE</div>
+            </div>
         </header>
 
         <div class="grid">
@@ -28,7 +30,7 @@
             <div class="card status-card" id="status-panel">
                 <h2>
                     SYSTEM STATUS
-                    <span style="font-size: 0.7em; opacity: 0.7">● LIVE</span>
+                    <span class="status-badge-live">● LIVE</span>
                 </h2>
 
                 <div class="big-stat" id="mode-display">INITIALIZING</div>
@@ -45,7 +47,7 @@
 
                 <div class="stat-row">
                     <span>EBPF MAPS</span>
-                    <span style="color: var(--neon-green)">PINNED</span>
+                    <span class="text-neon-green">PINNED</span>
                 </div>
 
                 <button id="panic-btn" class="btn-panic">
@@ -58,8 +60,8 @@
                 <h2>THREAT INTELLIGENCE MAP</h2>
                 <div class="map-placeholder">
                     <!-- Map lib would render here -->
-                    <div style="text-align:center;">
-                        <div style="font-size: 3rem; margin-bottom: 20px;">🌐</div>
+                    <div class="map-placeholder-content">
+                        <div class="map-icon-large">🌐</div>
                         <div id="geo-status">[ WAITING FOR GEO-TELEMETRY ]</div>
                     </div>
                 </div>
@@ -68,7 +70,7 @@
             <!-- Bottom Panel: Throughput -->
             <div class="card stats-card">
                 <h2>NETWORK TELEMETRY (L3/L4)</h2>
-                <div style="height: 250px; position: relative; width: 100%">
+                <div class="chart-container-responsive">
                     <canvas id="trafficChart"></canvas>
                 </div>
             </div>
@@ -77,9 +79,33 @@
             <div class="card campaigns-card">
                 <h2>ACTIVE CAMPAIGNS & ALERTS</h2>
                 <ul id="campaign-list">
-                    <li style="border-left-color: #555; background: rgba(255,255,255,0.05);">System initialize. Waiting
+                    <li class="list-item-loading">System initialize. Waiting
                         for log stream...</li>
                 </ul>
+            </div>
+
+            <!-- Full Width: Forensics -->
+            <div class="card forensics-card">
+                <h2>EVIDENCE LOCKER (PCAP)</h2>
+                <div id="forensics-list" class="forensics-container">
+                    <div class="no-captures-text">No captures found.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Config Modal -->
+    <div id="config-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>SYSTEM CONFIGURATION</h2>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <textarea id="config-editor" rows="15" spellcheck="false" aria-label="Configuration Editor"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button id="save-config-btn" class="btn btn-save">APPLY CHANGES</button>
             </div>
         </div>
     </div>

@@ -7,13 +7,17 @@ const elMode = document.getElementById("mode-display");
 const elGrs = document.getElementById("grs-display");
 const elStatusPanel = document.getElementById("status-panel");
 const elCampaigns = document.getElementById("campaign-list");
+const elForensics = document.getElementById("forensics-list");
 const btnPanic = document.getElementById("panic-btn");
 
 // Initialization
 async function init() {
     console.log("Initializing Dashboard...");
     setInterval(pollStatus, 1000);
+    setInterval(pollForensics, 5000); // Check for new files every 5s
     initChart();
+    // Initial fetch
+    pollForensics();
 }
 
 async function pollStatus() {
@@ -57,6 +61,34 @@ function updateUI(data) {
         });
     } else {
         elCampaigns.innerHTML = "<li>No active threats detected. System secure.</li>";
+    }
+}
+
+async function pollForensics() {
+    try {
+        const res = await fetch(`${API_URL}/forensics/files`);
+        const files = await res.json();
+
+        elForensics.innerHTML = "";
+        if (files.length > 0) {
+            files.forEach(f => {
+                const div = document.createElement("div");
+                div.className = "pcap-file";
+                div.style = "background: #111; border: 1px solid #333; padding: 10px; min-width: 200px; cursor: pointer; transition: 0.2s;";
+                div.innerHTML = `
+                    <div style="color: var(--neon-green); font-weight: bold;">${f.filename}</div>
+                    <div style="font-size: 0.8rem; color: #888;">${f.size_mb} MB | ${f.created}</div>
+                `;
+                div.onclick = () => window.open(`${API_URL}/forensics/download/${f.filename}`);
+                div.onmouseover = () => { div.style.borderColor = "var(--neon-green)"; };
+                div.onmouseout = () => { div.style.borderColor = "#333"; };
+                elForensics.appendChild(div);
+            });
+        } else {
+            elForensics.innerHTML = "<div style='color: #666; padding: 10px;'>No evidence captured yet.</div>";
+        }
+    } catch (e) {
+        console.error("Forensics fetch error:", e);
     }
 }
 
