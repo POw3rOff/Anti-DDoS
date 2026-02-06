@@ -138,8 +138,9 @@ class IntelligenceEngine:
 
         # 2. Targeted Mitigation Directives (High Confidence Only)
         for src in active_sources:
-            # We block if score is high or if we are in UNDER_ATTACK mode
-            if src["score"] >= 80 or (self.current_state == "UNDER_ATTACK" and src["score"] >= 60):
+            # We block if score is high or if we are in critical defense modes
+            is_critical_state = self.current_state in ["UNDER_ATTACK", "ESCALATED"]
+            if src["score"] >= 80 or (is_critical_state and src["score"] >= 60):
                 directives.append({
                     "timestamp": now_iso,
                     "type": "mitigation_directive",

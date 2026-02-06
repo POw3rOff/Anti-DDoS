@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 # Third-party imports
 try:
     import yaml
+    from intelligence.intelligence_engine import IntelligenceEngine
 except ImportError as e:
     print(f"CRITICAL: Missing required dependencies: {e}", file=sys.stderr)
     print("Please install: pip install pyyaml", file=sys.stderr)
@@ -127,7 +128,6 @@ class CorrelationEngine:
     def __init__(self, config):
         self.config = config.get("orchestrator", DEFAULT_CONFIG["orchestrator"])
         self.window_size = self.config["window_size_seconds"]
-        self.weights = self.config["weights"]
 
         # In-memory state: {source_ip: [events...]}
         self.event_buffer = defaultdict(list)
@@ -136,112 +136,33 @@ class CorrelationEngine:
 
         self.lock = threading.Lock()
 
-        self.current_state = "NORMAL"
-        self.last_attack_time = 0
-
     def ingest(self, event):
         """Add event to buffer and prune old events."""
         with self.lock:
             now = time.time()
             event["_recv_time"] = now
 
-            # Special handling for Campaign Alerts (from Cross-Layer Engine)
+            # Special handling for Campaign Alerts
             if event.get("type") == "campaign_alert":
                 self.active_campaigns.append(event)
-                # Keep campaigns active for macro window (e.g. 5 mins)
                 self.active_campaigns = [c for c in self.active_campaigns if now - c["_recv_time"] <= 300]
                 return
 
             src = event.get("source_entity", "unknown")
             self.event_buffer[src].append(event)
 
-            # Prune old events for this source
+            # Prune old events
             self.event_buffer[src] = [e for e in self.event_buffer[src]
                                       if now - e["_recv_time"] <= self.window_size]
 
-    def evaluate_risk(self):
-        """Calculate Global Risk Score (GRS) and per-source risks."""
+    def get_snapshot(self):
+        """Returns a snapshot of current events and campaigns for intelligence analysis."""
         with self.lock:
-            total_score = 0.0
-            active_sources = []
-            active_layers = set()
-
-            # 1. Evaluate Source-based Risks
-            for src, events in self.event_buffer.items():
-                if not events: continue
-
-                src_score = 0.0
-                layers_seen = set()
-
-                for e in events:
-                    layer = e.get("layer", "unknown")
-                    severity = e.get("severity", "LOW")
-
-                    # Base score mapping
-                    base_val = 10
-                    if severity == "MEDIUM": base_val = 30
-                    elif severity == "HIGH": base_val = 60
-                    elif severity == "CRITICAL": base_val = 90
-
-                    weight = self.weights.get(layer, 0.1)
-                    src_score += (base_val * weight)
-                    layers_seen.add(layer)
-                    active_layers.add(layer)
-
-                # Cross-layer multiplier
-                if len(layers_seen) > 1:
-                    src_score *= self.config["cross_layer_multiplier"]
-
-                src_score = min(src_score, 100.0)
-                total_score = max(total_score, src_score)
-
-                if src_score > 30:
-                    active_sources.append({"ip": src, "score": round(src_score, 1)})
-
-            # 2. Evaluate Campaign Alerts (High Priority)
-            if self.active_campaigns:
-                # If we have an active campaign, score is at least 80 (UNDER_ATTACK)
-                # If confidence is HIGH, bump to 95 (ESCALATED)
-                for camp in self.active_campaigns:
-                    if camp.get("confidence") == "HIGH":
-                        total_score = max(total_score, 95.0)
-                    else:
-                        total_score = max(total_score, 80.0)
-
-                    active_layers.add("correlation")
-
-            # Determine State
-            new_state = self._map_score_to_state(total_score)
-
-            # Hysteresis / Cooldown
-            now = time.time()
-            if total_score >= 60: # Threshold for UNDER_ATTACK
-                self.last_attack_time = now
-
-            if new_state == "NORMAL" and (now - self.last_attack_time < self.config["cooldown_seconds"]):
-                return None # Hold state
-
-            if new_state != self.current_state:
-                self.current_state = new_state
-                return {
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "state": self.current_state,
-                    "score": round(total_score, 1),
-                    "affected_sources": active_sources,
-                    "active_campaigns": [c.get("campaign_name") for c in self.active_campaigns],
-                    "active_layers": list(active_layers),
-                    "confidence": "HIGH" if len(active_layers) > 1 else "MEDIUM",
-                    "decision_id": f"dec-{int(now)}"
-                }
-
-            return None
-
-    def _map_score_to_state(self, score):
-        t = self.config["thresholds"]
-        if score >= t["escalated"]["min"]: return "ESCALATED"
-        if score >= t["under_attack"]["min"]: return "UNDER_ATTACK"
-        if score >= t["monitor"]["min"]: return "MONITOR"
-        return "NORMAL"
+            # Clear empty buffers
+            to_remove = [k for k, v in self.event_buffer.items() if not v]
+            for k in to_remove: del self.event_buffer[k]
+            
+            return dict(self.event_buffer), list(self.active_campaigns)
 
 class Orchestrator:
     def __init__(self, args, config):
@@ -253,7 +174,8 @@ class Orchestrator:
         # Components
         source = args.input_file if args.input == 'file' else None
         self.ingestor = EventIngestor(args.input, source, self.queue)
-        self.engine = CorrelationEngine(config)
+        self.correlation_engine = CorrelationEngine(config)
+        self.intelligence_engine = IntelligenceEngine(config)
 
         # State dump file
         self.state_file = "runtime/global_state.json"
@@ -270,15 +192,29 @@ class Orchestrator:
                 try:
                     while True:
                         event = self.queue.get_nowait()
-                        self.engine.ingest(event)
+                        self.correlation_engine.ingest(event)
                 except queue.Empty:
                     pass
 
-                # 2. Evaluate State
-                decision = self.engine.evaluate_risk()
-                if decision:
-                    self._emit_decision(decision)
-                    self._update_state_file(decision)
+                # 2. Extract Intelligence
+                source_events, campaigns = self.correlation_engine.get_snapshot()
+                grs, active_sources, layers = self.intelligence_engine.calculate_grs(source_events, campaigns)
+                
+                # 3. Check for State Change
+                new_state = self.intelligence_engine.determine_state(grs)
+                
+                # 4. Generate & Emit Directives 
+                # (We emit if there's a state change or if there are active mitigations needed)
+                directives = self.intelligence_engine.generate_directives(grs, active_sources, campaigns)
+                
+                if directives:
+                    for d in directives:
+                        self._emit_directive(d)
+                    
+                    # Update global state file with the latest "state_change" directive info
+                    state_dir = [d for d in directives if d["type"] == "state_change"]
+                    if state_dir:
+                        self._update_state_file(state_dir[0])
 
                 # 3. Sleep
                 time.sleep(1.0)
@@ -292,21 +228,23 @@ class Orchestrator:
             logging.error(f"Runtime error: {e}", exc_info=True)
             sys.exit(1)
 
-    def _emit_decision(self, decision):
-        print(json.dumps(decision))
+    def _emit_directive(self, directive):
+        print(json.dumps(directive))
         sys.stdout.flush()
-        logging.info(f"STATE CHANGE >>> {decision['state']} (Score: {decision['score']})")
+        if directive["type"] == "state_change":
+            logging.info(f"STATE CHANGE >>> {directive['state']} (Score: {directive['score']})")
+        elif directive["type"] == "mitigation_directive":
+            logging.warning(f"MITIGATION >>> {directive['action']} {directive['target']} ({directive['justification']})")
 
-    def _update_state_file(self, decision):
+    def _update_state_file(self, directive):
         """Writes current state to runtime file for Dashboard."""
         try:
             with open(self.state_file, 'w') as f:
-                # Map decision to simple state
                 state_dump = {
-                    "mode": decision["state"],
-                    "grs_score": decision["score"],
-                    "last_update": decision["timestamp"],
-                    "campaigns": decision.get("active_campaigns", [])
+                    "mode": directive["state"],
+                    "grs_score": directive["score"],
+                    "last_update": directive["timestamp"],
+                    "campaigns": [] # Future: track active campaign names
                 }
                 json.dump(state_dump, f)
         except Exception as e:
