@@ -10,7 +10,7 @@ This project is organized into modular components, each responsible for specific
 - **`layer3/`**: Network layer defenses. Includes `ip_flood_analyzer.py`, `l3_spoofing_detector.py` (for Bogons/Martians), and bandwidth monitoring to handle volumetric attacks.
 - **`layer4/`**: Transport layer defenses. Focuses on UDP flood monitoring (`l4_udp_flood_monitor.py`) and SYN flood analysis.
 - **`layer7/`**: Application layer defenses. Analyzes request rates (`l7_request_rate_analyzer.py`) to mitigate HTTP/application floods.
-- **`layer_game/`**: Game-aware defense layer. Includes specific protocol parsers and monitors for games (e.g., Metin2) and a generic game correlation engine.
+- **`layer_game/`**: Game-aware defense layer. Includes specific protocol parsers and monitors for games (e.g., Metin2, Rust) and a generic game correlation engine.
 - **`ml_intelligence/`**: Machine Learning layer. Contains anomaly detection models (`isolation_forest`, `ensemble`), feature extraction (`flow_features`), and bridges to the orchestrator.
 - **`correlation/`**: Cross-layer correlation engine. Aggregates events from all layers to identify complex attack campaigns.
 - **`mitigation/`**: Active response module. Includes `mitigation_controller.py` for executing defense playbooks.
