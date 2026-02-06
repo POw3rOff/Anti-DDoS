@@ -18,6 +18,8 @@ import queue
 import threading
 from collections import defaultdict
 from datetime import datetime, timezone
+from intelligence.intelligence_engine import IntelligenceEngine
+from alerts.alert_manager import AlertManager
 
 # Third-party imports
 try:
@@ -185,6 +187,7 @@ class Orchestrator:
         self.ingestor = EventIngestor(args.input, source, self.queue)
         self.correlation_engine = CorrelationEngine(config)
         self.intelligence_engine = IntelligenceEngine(config)
+        self.alert_manager = AlertManager(config)
 
         # State dump file
         self.state_file = "runtime/global_state.json"
@@ -202,6 +205,8 @@ class Orchestrator:
                     while True:
                         event = self.queue.get_nowait()
                         self.correlation_engine.ingest(event)
+                        # Process raw events for alerting (e.g., Campaign Alerts, ML Advisories)
+                        self.alert_manager.process_event(event)
                 except queue.Empty:
                     pass
 
@@ -219,6 +224,8 @@ class Orchestrator:
                 if directives:
                     for d in directives:
                         self._emit_directive(d)
+                        # Process generated directives for alerting
+                        self.alert_manager.process_event(d)
                     
                     # Update global state file with the latest "state_change" directive info
                     state_dir = [d for d in directives if d["type"] == "state_change"]
