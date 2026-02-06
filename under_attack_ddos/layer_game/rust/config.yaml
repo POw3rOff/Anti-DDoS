@@ -36,3 +36,11 @@ rcon_protection:
 # Volumetric Safety
 max_pps_per_ip: 150
 max_bandwidth_mbps: 3.0
+
+# Session Abuse (Post-Handshake Gameplay Traffic)
+session_abuse:
+  enabled: true
+  max_pps: 100             # Max packets per second for active gameplay
+  max_mbps: 1.0            # Max bandwidth per second (1 Mbps is generous for Rust)
+  max_entity_updates_pps: 20 # Limit large packets (potential entity spam)
+  idle_timeout: 60         # Cleanup session state after 60s inactivity
