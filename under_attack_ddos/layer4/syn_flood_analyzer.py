@@ -16,10 +16,6 @@ import signal
 from collections import defaultdict
 from datetime import datetime, timezone
 
-# Ensure project root is in path
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from intelligence.enrichment import GeoIPEnricher
-
 # Third-party imports
 try:
     import yaml
@@ -71,7 +67,6 @@ class SynFloodAnalyzer:
         self.config = config
         self.running = True
         self.syn_counts = defaultdict(int)
-        self.tcp_signatures = defaultdict(lambda: {"windows": set(), "ttls": set()})
 
         # Load thresholds
         l4_conf = self.config.get("layer4", {}).get("syn_flood", {})
@@ -85,26 +80,15 @@ class SynFloodAnalyzer:
         else:
             self.pps_threshold = base_pps
 
-        self.last_config_check = 0
-        self.config_mtime = 0
-        self.config_path = args.config if args.config else None
-
-        self.enricher = GeoIPEnricher()
         logging.info(f"Initialized {SCRIPT_NAME}. Mode: {args.mode}. SYN Threshold: {self.pps_threshold} PPS")
 
     def packet_callback(self, packet):
         """Called for each captured packet. BPF ensures we only get TCP SYNs."""
         # Optimization: Use getlayer() to avoid double traversal (contains + getitem)
         # Benchmark shows ~25% speedup vs 'if IP in packet'
-        ip = packet.getlayer(IP)
-        tcp = packet.getlayer(TCP)
-        if ip and tcp:
-            src = ip.src
-            self.syn_counts[src] += 1
-            
-            # TCP Signature Tracking
-            self.tcp_signatures[src]["windows"].add(tcp.window)
-            self.tcp_signatures[src]["ttls"].add(ip.ttl)
+        ip_layer = packet.getlayer(IP)
+        if ip_layer:
+            self.syn_counts[ip_layer.src] += 1
 
     def analyze_window(self, duration):
         """Analyzes the accumulated SYN counts."""
@@ -141,24 +125,6 @@ class SynFloodAnalyzer:
                         "duration": round(duration, 2)
                     }
                 }
-                
-                # Enrichment
-                enrichment = self.enricher.enrich(ip)
-                if enrichment.get("country") != "Unknown":
-                    event["context"] = enrichment
-                    country_tag = f" [{enrichment.get('country')} {enrichment.get('asn')}]"
-                else:
-                    country_tag = ""
-                
-                # Signature Check
-                bad_windows = l4_conf.get("bad_window_sizes", [])
-                src_windows = self.tcp_signatures.get(ip, {}).get("windows", set())
-                for w in src_windows:
-                    if w in bad_windows:
-                        event["severity"] = "CRITICAL"
-                        event["confidence"] = "HIGH"
-                        event["signature_alert"] = f"Detected Bad TCP Window: {w}"
-                        logging.warning(f"SIGNATURE ALERT: IP {ip} used known botnet Window Size {w}")
 
                 if self.args.dry_run:
                     event["status"] = "simulated"
@@ -174,40 +140,10 @@ class SynFloodAnalyzer:
                 print(json.dumps(e))
         elif events:
             for e in events:
-                ctx = e.get("context", {})
-                tag = f" [{ctx.get('country')} {ctx.get('asn')}]" if ctx else ""
-                logging.warning(f"ALERT: {e['event']} from {e['source_entity']}{tag} (PPS: {e['data']['syn_rate_pps']})")
+                logging.warning(f"ALERT: {e['event']} from {e['source_entity']} (PPS: {e['data']['syn_rate_pps']})")
 
         # Reset counters
         self.syn_counts.clear()
-        self.tcp_signatures.clear()
-        
-        # Hot Reload Config (Check every 5 seconds)
-        if self.config_path and (time.time() - self.last_config_check) > 5:
-            self._check_config_reload()
-
-    def _check_config_reload(self):
-        """Checks if config file has changed and reloads it."""
-        try:
-            mtime = os.stat(self.config_path).st_mtime
-            if mtime > self.config_mtime:
-                if self.config_mtime == 0:
-                    self.config_mtime = mtime
-                    return
-
-                logging.info("Configuration file changed. Reloading...")
-                new_conf = self._load_config(self.config_path)
-                l4_conf = new_conf.get("layer4", {}).get("syn_flood", {})
-                
-                # Update Threshold
-                self.pps_threshold = l4_conf.get("syn_rate_pps", 200)
-
-                self.config_mtime = mtime
-                self.last_config_check = time.time()
-                logging.info(f"Config Reloaded. New SYN Threshold: {self.pps_threshold}")
-        except Exception as e:
-            logging.error(f"Failed to hot-reload config: {e}")
-            self.last_config_check = time.time()
 
     def run(self):
         """Main Loop"""
@@ -219,39 +155,21 @@ class SynFloodAnalyzer:
         # "tcp[13] & 2 != 0" checks if the SYN bit is set in the flags field
         bpf_filter = "tcp[13] & 2 != 0"
 
-        logging.info(f"Starting {'eBPF ' if self.args.ebpf else ''}capture loop. Window: {window_size}s. Filter: '{bpf_filter}'")
+        logging.info(f"Starting capture loop. Window: {window_size}s. Filter: '{bpf_filter}'")
 
         try:
             while self.running:
                 start_loop = time.time()
 
-                if self.args.ebpf:
-                    # 1. Path to loader
-                    loader_path = os.path.join(os.path.dirname(__file__), "../ebpf/loader.py")
-                    cmd = [sys.executable, loader_path, "--syn-stats", "--json"]
-                    if self.args.dry_run: cmd.append("--dry-run")
-                    
-                    try:
-                        import subprocess
-                        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                        ebpf_stats = json.loads(result.stdout)
-                        # ebpf_stats format: {"10.0.0.1": 1500, ...}
-                        for ip, count in ebpf_stats.items():
-                            self.syn_counts[ip] = count
-                        
-                        time.sleep(window_size)
-                    except Exception as e:
-                        logging.error(f"Failed to fetch eBPF SYN stats: {e}")
-                        time.sleep(window_size)
-                else:
-                    # Sniff packets
-                    # count=0 means infinite (controlled by timeout)
-                    # store=0 prevents memory leaks
-                    sniff(filter=bpf_filter, prn=self.packet_callback, store=0, timeout=window_size)
+                # Sniff packets
+                # count=0 means infinite (controlled by timeout)
+                # store=0 prevents memory leaks
+                sniff(filter=bpf_filter, prn=self.packet_callback, store=0, timeout=window_size)
 
                 # Analyze
                 duration = time.time() - start_loop
                 if duration < 0.1: duration = 0.1
+
                 self.analyze_window(duration)
 
                 if self.args.once:
@@ -282,7 +200,6 @@ def main():
     parser.add_argument("--daemon", action="store_true", help="Run as background service")
     parser.add_argument("--once", action="store_true", help="Run single pass and exit")
     parser.add_argument("--json", action="store_true", help="Output JSON events to STDOUT")
-    parser.add_argument("--ebpf", action="store_true", help="Use eBPF sensors for metrics")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Log verbosity")
 
     args = parser.parse_args()
@@ -301,13 +218,7 @@ def main():
     )
 
     # Root Check
-    is_root = False
-    try:
-        is_root = (os.geteuid() == 0)
-    except AttributeError:
-        is_root = False
-
-    if not is_root and not args.dry_run:
+    if os.geteuid() != 0 and not args.dry_run:
         logging.warning("Not running as root. Sniffing may fail.")
 
     # Initialization

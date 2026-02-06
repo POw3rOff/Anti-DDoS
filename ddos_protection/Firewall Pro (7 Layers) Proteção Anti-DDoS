@@ -1,0 +1,1055 @@
+#!/bin/bash
+
+############ EXTRA STUFF TO HELP HIGH TRAFFIC (DDOS) ##################
+
+
+###################################################################################################################
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__        IPTables: Linux's Main line of Defense               ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|        IPTables: Linux's way of saying no to DoS kids       ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__                                                             ##    
+# _|___|___|___|___|___|___|___|___|___|___|___|___|        Version 1.0.0 -                                      ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__        IPTables Script created by p0w3r0ff                  ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__        Sources used and Studied;                            ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__     http://ipset.netfilter.org/iptables.man.html            ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__                                                             ##
+###################################################################################################################
+
+# Firewall iptables para o site https://cyber-gamers.org/
+
+# Este script implementa um firewall utilizando o iptables para proteger o servidor associado ao site Cyber Gamers.
+# Foi desenvolvido pelos autores poweroff, thegamer e Karbust, e testado contra ataques DDoS pela comunidade.
+# Mais informações sobre o projeto podem ser encontradas em https://cyber-gamers.org/
+
+# Nota: Certifique-se de rever e personalizar as regras do iptables de acordo com os requisitos específicos do
+# seu ambiente antes de implementar este script em produção.
+
+#----------------------------------------------------------#
+# Proteção Anti-DDoS: Reforçando o Primeiro Layer          #
+#----------------------------------------------------------#
+
+# Configurações para fortalecer a defesa contra ataques DDoS
+# Implemente medidas como autenticação robusta, atualizações contínuas,
+# monitoramento proativo, firewalls eficientes e sensibilização dos utilizadores.
+
+# Lembre-se de configurar regras específicas para mitigar ameaças DDoS:
+# - Utilize firewalls para filtrar tráfego malicioso.
+# - Estabeleça limites de taxa para conexões.
+# - Considere o uso de serviços anti-DDoS externos.
+
+# Teste regularmente a eficácia da proteção DDoS e mantenha backups atualizados.
+# A proteção do primeiro layer é essencial para manter a resiliência contra
+# ameaças cibernéticas. Fique seguro!
+
+# Comandos Básicos:
+# Visualizar as regras do iptables:
+#     iptables -L
+#     echo "Regras iptables visualizadas com sucesso."
+#----------------------------------------------------------#
+
+
+# Lista de URLs dos serviços de blocklist
+declare -A blocklist_urls=(
+    # Lista de URLs existente...
+    ["all"]="https://lists.blocklist.de/lists/all.txt"
+    ["bruteforcelogin"]="https://lists.blocklist.de/lists/bruteforcelogin.txt"
+    ["mail"]="https://lists.blocklist.de/lists/mail.txt"
+    ["firehol1"]="https://iplists.firehol.org/files/firehol_level1.netset"
+    ["firehol2"]="https://iplists.firehol.org/files/firehol_level2.netset"
+    ["firehol3"]="https://iplists.firehol.org/files/firehol_level3.netset"
+    ["firehol4"]="https://iplists.firehol.org/files/firehol_level4.netset"
+    ["firehol_web"]="https://iplists.firehol.org/files/firehol_webclient.netset"
+    ["firehol_proxies"]="https://iplists.firehol.org/files/firehol_proxies.netset"
+    ["spamhaus"]="https://www.spamhaus.org/drop/drop.txt"
+    ["blocklist_de"]="https://lists.blocklist.de/lists/zbdl.txt"
+    ["emergingthreats"]="https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt"
+    ["binarydefense"]="https://www.binarydefense.com/banlist.txt"
+    ["feodo"]="https://feodotracker.abuse.ch/blocklist/?download=ipblocklist"
+    ["ransomwaretracker"]="https://ransomwaretracker.abuse.ch/downloads/RW_IPBL.txt"
+    ["autoshun"]="https://www.autoshun.org/files/shunlist.csv"
+    ["dshield"]="https://www.dshield.org/ipsascii.html"
+    ["zeustracker"]="https://zeustracker.abuse.ch/blocklist.php?download=ipblocklist"
+    ["herrbischoff"]="https://raw.githubusercontent.com/herrbischoff/awesome-ipsum/master/ips.txt"
+    ["malc0de"]="http://malc0de.com/bl/IP_Blacklist.txt"
+    ["malwaredomainlist"]="https://www.malwaredomainlist.com/hostslist/ip.txt"
+    ["openbl"]="https://www.openbl.org/lists/base.txt"
+    ["ciarmy"]="http://cinsscore.com/list/ci-badguys.txt"
+    ["blocklist_net_ua"]="https://blocklist.net.ua/blocklist.csv"
+    ["blocklist_ru"]="https://www.blocklist.de/downloads/export-ips_all.txt"
+    ["blocklist_top"]="https://lists.blocklist.de/lists/top-100.txt"
+    ["blocklist_ips"]="https://lists.blocklist.de/lists/ips.txt"
+    ["blocklist_edu"]="https://lists.blocklist.de/lists/edu.txt"
+    ["blocklist_psh"]="https://lists.blocklist.de/lists/psh.txt"
+    # Novos serviços adicionados
+    [ipdeny_cn]="http://www.ipdeny.com/ipblocks/data/countries/cn.zone"  # China
+    [ipdeny_hk]="http://www.ipdeny.com/ipblocks/data/countries/hk.zone"  # Hong Kong
+    [ipdeny_mo]="http://www.ipdeny.com/ipblocks/data/countries/mo.zone"  # Macau
+    [ipdeny_kr]="http://www.ipdeny.com/ipblocks/data/countries/kr.zone"  # Coreia do Sul
+    [ipdeny_kp]="http://www.ipdeny.com/ipblocks/data/countries/kp.zone"  # Coreia do Norte
+)
+
+# Diretório onde as listas serão salvas
+blocklist_dir="/caminho/para/diretorio"
+
+# Arquivo temporário para armazenar as listas antes da fusão
+temp_file="/caminho/para/tempfile"
+
+# Mensagem para regras do iptables
+IPTABLES_MESSAGE="Regra adicionada pelo script de blocklist"
+
+# Função para verificar e criar diretórios, se necessário
+check_and_create_directory() {
+    if [ ! -d "$1" ]; then
+        mkdir -p "$1"
+    fi
+}
+
+# Adiciona mensagem às regras do iptables
+add_iptables_rule() {
+    if iptables -A INPUT -s "$1" -j DROP -m comment --comment "$IPTABLES_MESSAGE: $2" 2>/dev/null; then
+        echo "Regra adicionada com sucesso: $2"
+    else
+        echo "Falha ao adicionar a regra para $2"
+        exit 1
+    fi
+}
+
+# Verifica e cria os diretórios necessários
+check_and_create_directory "$blocklist_dir"
+
+# Itera sobre as URLs e baixa as listas
+for service in "${!blocklist_urls[@]}"; do
+    curl -sS "${blocklist_urls[$service]}" >> "$temp_file"
+    if [ $? -ne 0 ]; then
+        echo "Falha ao baixar a lista $service"
+        exit 1
+    fi
+done
+
+# Remove duplicatas e ordena a lista
+sort -u "$temp_file" > "$blocklist_dir/blocklist_combined.txt"
+
+# Limpa os arquivos temporários
+rm "$temp_file"
+
+# Atualiza as regras do iptables com os IPs da blocklist
+# Otimização: Uso de ipset para melhor desempenho
+ipset_name="blocklist"
+# Criar o set se não existir
+ipset -exist create "$ipset_name" hash:ip hashsize 4096
+
+# Limpar o set para garantir que apenas os IPs atuais estejam listados
+ipset flush "$ipset_name"
+
+# Adicionar IPs ao ipset em massa
+sed "s/^/add $ipset_name /" "$blocklist_dir/blocklist_combined.txt" | ipset restore
+
+# Adicionar regra única ao iptables
+if ! iptables -C INPUT -m set --match-set "$ipset_name" src -j DROP -m comment --comment "$IPTABLES_MESSAGE: IP Blocklist" 2>/dev/null; then
+    iptables -A INPUT -m set --match-set "$ipset_name" src -j DROP -m comment --comment "$IPTABLES_MESSAGE: IP Blocklist"
+fi
+echo "Regras adicionadas via ipset com sucesso."
+
+# Regista o log de atividades
+timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+echo "Script executado em $timestamp"
+echo "Listas download:"
+for service in "${!blocklist_urls[@]}"; do
+    echo "${blocklist_urls[$service]}"
+done
+echo "Número de IPS de putos bloqueados: $(wc -l "$blocklist_dir/blocklist_combined.txt")"
+echo "Bloquear putos desde 2012"
+
+#----------------------------------------------------------#
+# Proteção Anti-DDoS: Reforçando o Segundo Layer           #
+#----------------------------------------------------------#
+
+#----------------------------------------------------------#
+# Configuração                                             #
+#----------------------------------------------------------#
+
+# Número da porta de administração
+LOGIN=`cat /etc/ssh/sshd_config | grep '^#\?Port ' | tail -n 1 | sed -e 's/^[^0-9]*\([0-9]\+\).*$/\1/'`
+
+# Processamento por país
+# Permissão: Portugal
+LOCAL_COUNTRY_CODE="PT"
+# - Bloquear: China | Hong Kong | Macau | Coreia do Sul | Coreia do Norte
+BLOCK_COUNTRY_CODE="CN|HK|MO|KR|KP"
+
+# Formato de dados do ficheiro
+FORMAT="grep ^[0-9] | cut -d' ' -f1"
+
+# Pré-processamento / Pós-processamento
+PREPROCESS=
+POSTPROCESS=
+
+# Funções
+ROLES=(GLOBAL LOCAL CONNECTION SYSTEM NETWORK AUTH PRIVATE CUSTOMER PUBLIC TEST)
+GLOBAL=(FW_BROADCAST FW_MULTICAST BLOCK_COUNTRY)
+LOCAL=(IPS ACCEPT)
+CONNECTION=(FIREWALL IPS ACCEPT)
+SYSTEM=(whitelist/system FIREWALL IPF IPS ACCEPT)
+NETWORK=(whitelist/network FIREWALL IPF IPS ACCEPT)
+AUTH=(whitelist/auth LOCAL_COUNTRY FIREWALL IPF IPS ACCEPT)
+PRIVATE=("whitelist/{auth,user}|DROP" LOCAL_COUNTRY FIREWALL IPF IPS ACCEPT)
+CUSTOMER=(LOCAL_COUNTRY FIREWALL IPS ACCEPT)
+PUBLIC=(FIREWALL IPS ACCEPT)
+TEST=("whitelist/{auth,user}|TRACK_PROWLER|DROP" LOCAL_COUNTRY FIREWALL IPF "IPS|DROP")
+
+# Aplicações
+## Local
+MAP=("${MAP[@]}" "INPUT -i lo -j LOCAL")
+MAP=("${MAP[@]}" "OUTPUT -o lo -j LOCAL")
+MAP=("${MAP[@]}" "FORWARD -i lo -j LOCAL")
+MAP=("${MAP[@]}" "FORWARD -o lo -j LOCAL")
+## Conexão
+MAP=("${MAP[@]}" "INPUT -m state --state ESTABLISHED,RELATED -j CONNECTION")
+MAP=("${MAP[@]}" "OUTPUT -m state --state NEW,ESTABLISHED -j CONNECTION")
+MAP=("${MAP[@]}" "FORWARD -m state --state ESTABLISHED,RELATED -j CONNECTION")
+## Global
+MAP=("${MAP[@]}" "INPUT -j GLOBAL")
+MAP=("${MAP[@]}" "OUTPUT -j GLOBAL")
+MAP=("${MAP[@]}" "FORWARD -j GLOBAL")
+## Sistema
+## - ICMP
+MAP=("${MAP[@]}" "INPUT -p icmp --icmp-type destination-unreachable -j SYSTEM")
+MAP=("${MAP[@]}" "INPUT -p icmp --icmp-type source-quench -j SYSTEM")
+MAP=("${MAP[@]}" "INPUT -p icmp --icmp-type redirect -j SYSTEM")
+MAP=("${MAP[@]}" "INPUT -p icmp --icmp-type time-exceeded -j SYSTEM")
+MAP=("${MAP[@]}" "INPUT -p icmp --icmp-type parameter-problem -j SYSTEM")
+## - DNS
+NAMESERVERS=$(echo $(grep '^nameserver' /etc/resolv.conf | cut -d' ' -f2) | tr ' ' ,)
+MAP=("${MAP[@]}" "INPUT -s $NAMESERVERS -p udp --dport 53 -j SYSTEM")
+MAP=("${MAP[@]}" "OUTPUT -d $NAMESERVERS -p udp --sport 53 -j SYSTEM")
+MAP=("${MAP[@]}" "FORWARD -s $NAMESERVERS -p udp --dport 53 -j SYSTEM")
+MAP=("${MAP[@]}" "FORWARD -d $NAMESERVERS -p udp --sport 53 -j SYSTEM")
+## - NTP
+NTPSERVERS=$(echo $(grep '^server' /etc/{ntp,chrony}.conf 2>/dev/null | cut -d' ' -f2) | tr ' ' ,)
+MAP=("${MAP[@]}" "INPUT -s $NTPSERVERS -p udp --dport 123 -j SYSTEM")
+MAP=("${MAP[@]}" "OUTPUT -d $NTPSERVERS -p udp --sport 123 -j SYSTEM")
+MAP=("${MAP[@]}" "FORWARD -s $NTPSERVERS -p udp --dport 123 -j SYSTEM")
+MAP=("${MAP[@]}" "FORWARD -d $NTPSERVERS -p udp --sport 123 -j SYSTEM")
+## Serviços
+## - SSH
+MAP=("${MAP[@]}" "INPUT -p tcp -m multiport --dports $LOGIN -j AUTH")
+## - HTTP
+MAP=("${MAP[@]}" "INPUT -p tcp --dport 80 -j PUBLIC")
+## - HTTPS
+MAP=("${MAP[@]}" "INPUT -p tcp --dport 443 -j CUSTOMER")
+## TRAP
+## - PORTSCAN
+MAP=("${MAP[@]}" "INPUT -j TRAP_PORTSCAN")
+MAP=("${MAP[@]}" "FORWARD -j TRAP_PORTSCAN")
+
+# Intervalo de atualização de alocação de IP (dias)
+INTERVAL=7
+
+# Uso do IPS (Sistema de Prevenção de Intrusões)
+IDSIPS=
+
+# Atualização rigorosa
+SECURE=
+
+# Taxa máxima de geração de logs
+LOG_LIMIT=60/m
+LOG_LIMIT_BURST=1000
+
+# Comandos
+IPTABLES=iptables
+
+# Diretório de destino para salvar a lista de IPs
+LIST_DIR=/etc/iptables/
+
+# Diretório de destino para salvar a alocação de IPs
+CACHE_DIR=/var/cache/iptables/
+
+
+#----------------------------------------------------------#
+#   Firewall kernel Anti-DDoS: Reforçando /sysctl.conf     #
+#----------------------------------------------------------#
+
+
+# Prevenção de falsificação do endereço IP de origem
+sed -i '/net.ipv4.conf.*.rp_filter/d' /etc/sysctl.conf
+for dev in $(ls /proc/sys/net/ipv4/conf/); do
+    sysctl -w net.ipv4.conf.$dev.rp_filter=1 > /dev/null
+    echo "net.ipv4.conf.$dev.rp_filter=1" >> /etc/sysctl.conf
+done
+
+# Recusar pacotes ICMP Redirect
+sed -i '/net.ipv4.conf.*.accept_redirects/d' /etc/sysctl.conf
+for dev in $(ls /proc/sys/net/ipv4/conf/); do
+    sysctl -w net.ipv4.conf.$dev.accept_redirects=0 > /dev/null
+    echo "net.ipv4.conf.$dev.accept_redirects=0" >> /etc/sysctl.conf
+done
+
+# Recusar pacotes com roteamento de origem (Source Routed)
+sed -i '/net.ipv4.conf.*.accept_source_route/d' /etc/sysctl.conf
+for dev in $(ls /proc/sys/net/ipv4/conf/); do
+    sysctl -w net.ipv4.conf.$dev.accept_source_route=0 > /dev/null
+    echo "net.ipv4.conf.$dev.accept_source_route=0" >> /etc/sysctl.conf
+done
+
+# Não responder a pings direcionados ao endereço de broadcast
+# ※ Medida contra ataques de Smurf
+sysctl -w net.ipv4.icmp_echo_ignore_broadcasts=1 > /dev/null
+sed -i '/net.ipv4.icmp_echo_ignore_broadcasts/d' /etc/sysctl.conf
+echo "net.ipv4.icmp_echo_ignore_broadcasts=1" >> /etc/sysctl.conf
+
+# Ativar SYN Cookies
+# ※ Medida contra ataques de TCP SYN Flood
+sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null
+sed -i '/net.ipv4.tcp_syncookies/d' /etc/sysctl.conf
+echo "net.ipv4.tcp_syncookies=1" >> /etc/sysctl.conf
+
+# Não notificar o tempo contínuo de operação do sistema
+# ※ Medida contra identificação da versão do kernel
+sysctl -w net.ipv4.tcp_timestamps=1 > /dev/null
+sed -i '/net.ipv4.tcp_timestamps/d' /etc/sysctl.conf
+echo "net.ipv4.tcp_timestamps=1" >> /etc/sysctl.conf
+
+# Registrar e descartar todos os acessos provenientes de IPs que realizaram acessos suspeitos
+# Ocultar portas públicas de acessos investigativos
+# Pode ser desativado em servidores públicos
+
+$IPTABLES -N IPF 2>/dev/null
+$IPTABLES -N ANTI_INTRUDER
+$IPTABLES -N ANTI_INTRUDER_
+$IPTABLES -N ANTI_INTRUDER__
+$IPTABLES -A IPF -p tcp ! --dport 0:1023 -m state --state NEW,INVALID -j ANTI_INTRUDER
+$IPTABLES -A IPF -p udp -m state --state NEW,INVALID -j ANTI_INTRUDER
+$IPTABLES -A IPF -p icmp -j ANTI_INTRUDER
+$IPTABLES -A ANTI_INTRUDER -i e+ -j ANTI_INTRUDER_
+$IPTABLES -A ANTI_INTRUDER -i p+ -j ANTI_INTRUDER_
+$IPTABLES -A ANTI_INTRUDER -i w+ -j ANTI_INTRUDER_
+# Não filtrar portas conhecidas
+$IPTABLES -A ANTI_INTRUDER_ -m recent --name attacker-rapid --update --rttl -j ANTI_INTRUDER__
+$IPTABLES -A ANTI_INTRUDER_ -m recent --name attacker-fast --update --rttl -j ANTI_INTRUDER__
+$IPTABLES -A ANTI_INTRUDER_ -m recent --name attacker-medium --update --rttl -j ANTI_INTRUDER__
+$IPTABLES -A ANTI_INTRUDER_ -m recent --name attacker-slow --update --rttl -j ANTI_INTRUDER__
+$IPTABLES -A ANTI_INTRUDER_ -m recent --name prowler-rapid --update --rttl -j ANTI_INTRUDER__
+$IPTABLES -A ANTI_INTRUDER_ -m recent --name prowler-fast --update --rttl -j ANTI_INTRUDER__
+$IPTABLES -A ANTI_INTRUDER_ -m recent --name prowler-medium --update --rttl -j ANTI_INTRUDER__
+$IPTABLES -A ANTI_INTRUDER_ -m recent --name prowler-slow --update --rttl -j ANTI_INTRUDER__
+$IPTABLES -A ANTI_INTRUDER__ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES INTRUDER] : '
+$IPTABLES -A ANTI_INTRUDER__ -j DROP
+
+# $IPTABLES -A FIREWALL -j IPF && echo "FIREWALL ANTI_INTRUDER"
+# O módulo recent pode armazenar apenas 100 IPs por padrão
+# Enviar um grande número de pacotes com endereços de origem falsificados ou aumentar o número absoluto de fontes de investigação pode desativá-lo facilmente
+# Se lidar com isso, não será eficaz
+# Como uma defesa para aumentar o custo mínimo necessário para a confirmação da presença de IPs de valor de ataque desconhecido e para varreduras de portas
+# Em servidores com funções administrativas, é necessário isolar e ocultar servidores não divulgados para evitar serem identificados e sofrerem ataques reais
+# $ vi /etc/modprobe.d/iptables-recent.conf
+# options ip_list_hash_size=0 xt_recent ip_list_tot=1000
+# $ reboot
+# $ cat /sys/module/xt_recent/parameters/ip_list_tot
+# $ ls /proc/net/xt_recent/
+echo "Regras anti-intrusão configuradas."
+
+# Registrar o IP que está realizando acessos suspeitos como suspeito
+# Rastrear acessos suspeitos por longos períodos
+# Não deve ser usado como filtro para comunicações legítimas
+# Pode ser desativado em servidores públicos
+
+$IPTABLES -N TRACK_PROWLER 2>/dev/null
+$IPTABLES -N ANTI_PROWLER
+$IPTABLES -N ANTI_PROWLER_
+$IPTABLES -A TRACK_PROWLER -j ANTI_PROWLER
+$IPTABLES -A ANTI_PROWLER -i e+ -j ANTI_PROWLER_
+$IPTABLES -A ANTI_PROWLER -i p+ -j ANTI_PROWLER_
+$IPTABLES -A ANTI_PROWLER -i w+ -j ANTI_PROWLER_
+
+# Detectar acessos rápidos de possíveis prowlers (rapid: 10 segundos)
+$IPTABLES -A ANTI_PROWLER_ -m recent --name prowler-rapid --update --rttl --seconds 10 -j RETURN
+$IPTABLES -A ANTI_PROWLER_ -m recent --name prowler-rapid --set
+
+# Limitar o número de acessos rápidos para identificar possíveis prowlers (6 por minuto)
+$IPTABLES -A ANTI_PROWLER_ \
+          -m hashlimit \
+          --hashlimit-name prowler-rapid \
+          --hashlimit-above 6/m \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 10000 \
+          -j RETURN
+
+# Detectar acessos rápidos de possíveis prowlers (fast: 1 minuto)
+$IPTABLES -A ANTI_PROWLER_ -m recent --name prowler-fast --update --rttl --seconds 60 -j RETURN
+$IPTABLES -A ANTI_PROWLER_ -m recent --name prowler-fast --set
+
+# Limitar o número de acessos rápidos para identificar possíveis prowlers (1 por minuto)
+$IPTABLES -A ANTI_PROWLER_ \
+          -m hashlimit \
+          --hashlimit-name prowler-fast \
+          --hashlimit-above 1/m \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 60000 \
+          -j RETURN
+
+# Detectar acessos médios de possíveis prowlers (medium: 1 hora)
+$IPTABLES -A ANTI_PROWLER_ -m recent --name prowler-medium --update --rttl --seconds 3600 -j RETURN
+$IPTABLES -A ANTI_PROWLER_ -m recent --name prowler-medium --set
+
+# Limitar o número de acessos médios para identificar possíveis prowlers (1 por hora)
+$IPTABLES -A ANTI_PROWLER_ \
+          -m hashlimit \
+          --hashlimit-name prowler-medium \
+          --hashlimit-above 1/h \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 3600000 \
+          -j RETURN
+
+# Detectar acessos lentos de possíveis prowlers (slow: 1 dia)
+$IPTABLES -A ANTI_PROWLER_ -m recent --name prowler-slow --update --rttl --seconds 86400 -j RETURN
+$IPTABLES -A ANTI_PROWLER_ -m recent --name prowler-slow --set
+
+# Registrar o IP que está realizando ataques como atacante
+# Semelhante ao TRACK_PROWLER
+$IPTABLES -N TRACK_ATTACKER 2>/dev/null
+$IPTABLES -N ANTI_ATTACKER
+$IPTABLES -N ANTI_ATTACKER_
+$IPTABLES -A TRACK_ATTACKER -j ANTI_ATTACKER
+$IPTABLES -A ANTI_ATTACKER -i e+ -j ANTI_ATTACKER_
+$IPTABLES -A ANTI_ATTACKER -i p+ -j ANTI_ATTACKER_
+$IPTABLES -A ANTI_ATTACKER -i w+ -j ANTI_ATTACKER_
+
+# Detectar acessos rápidos de possíveis atacantes (rapid: 10 segundos)
+$IPTABLES -A ANTI_ATTACKER_ -m recent --name attacker-rapid --update --rttl --seconds 10 -j RETURN
+$IPTABLES -A ANTI_ATTACKER_ -m recent --name attacker-rapid --set
+
+# Limitar o número de acessos rápidos para identificar possíveis atacantes (6 por minuto)
+$IPTABLES -A ANTI_ATTACKER_ \
+          -m hashlimit \
+          --hashlimit-name attacker-rapid \
+          --hashlimit-above 6/m \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 10000 \
+          -j RETURN
+
+# Detectar acessos rápidos de possíveis atacantes (fast: 1 minuto)
+$IPTABLES -A ANTI_ATTACKER_ -m recent --name attacker-fast --update --rttl --seconds 60 -j RETURN
+$IPTABLES -A ANTI_ATTACKER_ -m recent --name attacker-fast --set
+
+# Limitar o número de acessos rápidos para identificar possíveis atacantes (1 por minuto)
+$IPTABLES -A ANTI_ATTACKER_ \
+          -m hashlimit \
+          --hashlimit-name attacker-fast \
+          --hashlimit-above 1/m \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 60000 \
+          -j RETURN
+
+# Detectar acessos médios de possíveis atacantes (medium: 1 hora)
+$IPTABLES -A ANTI_ATTACKER_ -m recent --name attacker-medium --update --rttl --seconds 3600 -j RETURN
+$IPTABLES -A ANTI_ATTACKER_ -m recent --name attacker-medium --set
+
+# Limitar o número de acessos médios para identificar possíveis atacantes (1 por hora)
+$IPTABLES -A ANTI_ATTACKER_ \
+          -m hashlimit \
+          --hashlimit-name attacker-medium \
+          --hashlimit-above 1/h \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 3600000 \
+          -j RETURN
+
+# Detectar acessos lentos de possíveis atacantes (slow: 1 dia)
+$IPTABLES -A ANTI_ATTACKER_ -m recent --name attacker-slow --update --rttl --seconds 86400 -j RETURN
+$IPTABLES -A ANTI_ATTACKER_ -m recent --name attacker-slow --set
+
+# Descartar pacotes de broadcast sem registrar no log
+$IPTABLES -N FW_BROADCAST 2>/dev/null
+$IPTABLES -N DENY_BROADCAST
+$IPTABLES -A FW_BROADCAST -i e+ -j DENY_BROADCAST
+$IPTABLES -A FW_BROADCAST -i p+ -j DENY_BROADCAST
+$IPTABLES -A FW_BROADCAST -i w+ -j DENY_BROADCAST
+
+# Descartar pacotes de broadcast sem registrar no log
+$IPTABLES -A DENY_BROADCAST -m pkttype --pkt-type broadcast -j DROP
+
+# Descartar pacotes de multicast sem registrar no log
+$IPTABLES -N FW_MULTICAST 2>/dev/null
+$IPTABLES -N DENY_MULTICAST
+$IPTABLES -A FW_MULTICAST -i e+ -j DENY_MULTICAST
+$IPTABLES -A FW_MULTICAST -i p+ -j DENY_MULTICAST
+$IPTABLES -A FW_MULTICAST -i w+ -j DENY_MULTICAST
+
+# Descartar pacotes de multicast sem registrar no log
+$IPTABLES -A DENY_MULTICAST -m pkttype --pkt-type multicast -j DROP
+
+# Registrar e descartar pacotes fragmentados, considerando como NG (não permitido)
+$IPTABLES -N FW_FRAGMENT 2>/dev/null
+$IPTABLES -N DENY_FRAGMENT
+$IPTABLES -N DENY_FRAGMENT_
+$IPTABLES -A FW_FRAGMENT -i e+ -j DENY_FRAGMENT
+$IPTABLES -A FW_FRAGMENT -i p+ -j DENY_FRAGMENT
+$IPTABLES -A FW_FRAGMENT -i w+ -j DENY_FRAGMENT
+
+# Descartar pacotes fragmentados e registrar no log
+$IPTABLES -A DENY_FRAGMENT -f -j DENY_FRAGMENT_
+$IPTABLES -A DENY_FRAGMENT_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES FRAGMENT] : '
+$IPTABLES -A DENY_FRAGMENT_ -j TRACK_ATTACKER
+$IPTABLES -A DENY_FRAGMENT_ -j DROP
+$IPTABLES -A FIREWALL -j FW_FRAGMENT && echo "FIREWALL	DENY_FRAGMENT"
+
+# Registrar e descartar pacotes inválidos, considerando como NG (não permitido)
+$IPTABLES -N FW_INVALID 2>/dev/null
+$IPTABLES -N DENY_INVALID
+$IPTABLES -N DENY_INVALID_
+$IPTABLES -A FW_INVALID -i e+ -j DENY_INVALID
+$IPTABLES -A FW_INVALID -i p+ -j DENY_INVALID
+$IPTABLES -A FW_INVALID -i w+ -j DENY_INVALID
+
+# Descartar pacotes inválidos e registrar no log
+$IPTABLES -A DENY_INVALID -m state --state INVALID -j DENY_INVALID_
+$IPTABLES -A DENY_INVALID_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES INVALID] : '
+$IPTABLES -A DENY_INVALID_ -j DROP
+$IPTABLES -A FIREWALL -j FW_INVALID && echo "FIREWALL	DENY_INVALID"
+
+# Descartar e não registrar acessos relacionados ao NetBIOS externo, considerando como NG (não permitido)
+$IPTABLES -N FW_NETBIOS 2>/dev/null
+$IPTABLES -N DENY_NETBIOS
+$IPTABLES -N DENY_NETBIOS_
+$IPTABLES -A FW_NETBIOS -i e+ -j DENY_NETBIOS
+$IPTABLES -A FW_NETBIOS -i p+ -j DENY_NETBIOS
+$IPTABLES -A FW_NETBIOS -i w+ -j DENY_NETBIOS
+
+# Descartar acessos relacionados ao NetBIOS em portas específicas e registrar no log
+$IPTABLES -A DENY_NETBIOS -p tcp -m multiport --dports 135,137,138,139,445 -j DENY_NETBIOS_
+$IPTABLES -A DENY_NETBIOS -p udp -m multiport --dports 135,137,138,139,445 -j DENY_NETBIOS_
+
+# Registrar no log e descartar pacotes relacionados ao NetBIOS
+$IPTABLES -A DENY_NETBIOS_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES NETBIOS] : '
+$IPTABLES -A DENY_NETBIOS_ -j TRACK_ATTACKER
+$IPTABLES -A DENY_NETBIOS_ -j DROP
+$IPTABLES -A FIREWALL -j FW_NETBIOS && echo "FIREWALL	DENY_NETBIOS"
+$IPTABLES -A FW_BASIC -j FW_NETBIOS
+
+# Registrar e descartar pacotes com flags inadequadas
+# ※ Medidas contra scans stealth
+# ※ Portas conhecidas originalmente não têm sigilo, então a prioridade é evitar falsos positivos em vez de proteger
+# ※ Cuidado ao não realizar a conclusão do SSH antes de ser desconectado, pois isso pode causar desconexões inesperadas
+# ※ A ativação não é necessária enquanto TRAP_PORTSCAN e IPF estão funcionando
+# ※ A validade dos padrões de flags não foi verificada
+# ※ Pode ser desativado em servidores públicos
+
+# Descartar e não registrar acessos relacionados a stealth scans
+$IPTABLES -N FW_STEALTHSCAN 2>/dev/null
+$IPTABLES -N ANTI_STEALTHSCAN
+$IPTABLES -N ANTI_STEALTHSCAN_
+$IPTABLES -N ANTI_STEALTHSCAN__
+$IPTABLES -A FW_STEALTHSCAN -j ANTI_STEALTHSCAN
+
+# Analisar e descartar pacotes relacionados a stealth scans
+$IPTABLES -A ANTI_STEALTHSCAN -i e+ -p tcp -m state --state NEW -j ANTI_STEALTHSCAN_
+$IPTABLES -A ANTI_STEALTHSCAN -i p+ -p tcp -m state --state NEW -j ANTI_STEALTHSCAN_
+$IPTABLES -A ANTI_STEALTHSCAN -i w+ -p tcp -m state --state NEW -j ANTI_STEALTHSCAN_
+
+# Permitir pacotes com portas conhecidas
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --dport 0:1023 -j RETURN
+
+# Analisar pacotes com flags inadequadas e descartar
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp -m state --state NEW --tcp-flags SYN,ACK SYN,ACK -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags ACK,FIN FIN -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags ACK,PSH PSH -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags ACK,URG URG -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags SYN,FIN SYN,FIN -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags SYN,RST SYN,RST -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags FIN,RST FIN,RST -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags ALL ALL -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags ALL NONE -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags ALL FIN -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN_ -p tcp --tcp-flags ALL FIN,PSH,URG -j ANTI_STEALTHSCAN__
+$IPTABLES -A ANTI_STEALTHSCAN__ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES STEALTHSCAN] : '
+$IPTABLES -A ANTI_STEALTHSCAN__ -j TRACK_ATTACKER
+$IPTABLES -A ANTI_STEALTHSCAN__ -j DROP
+$IPTABLES -A FIREWALL -j FW_STEALTHSCAN && echo "FIREWALL	ANTI_STEALTHSCAN"
+
+# Registrar e descartar pacotes com endereços IP de origem privados provenientes da WAN, considerando como NG (não permitido)
+# ※ Medidas contra ataques de IP spoofing
+$IPTABLES -N FW_SPOOFING 2>/dev/null
+$IPTABLES -N ANTI_SPOOFING
+$IPTABLES -N ANTI_SPOOFING_
+$IPTABLES -N ANTI_SPOOFING__
+$IPTABLES -A FW_SPOOFING -j ANTI_SPOOFING
+$IPTABLES -A ANTI_SPOOFING -i e+ -j ANTI_SPOOFING_
+$IPTABLES -A ANTI_SPOOFING -i p+ -j ANTI_SPOOFING_
+$IPTABLES -A ANTI_SPOOFING -i w+ -j ANTI_SPOOFING_
+$IPTABLES -A ANTI_SPOOFING_ -s 127.0.0.0/8    -j ANTI_SPOOFING__
+$IPTABLES -A ANTI_SPOOFING_ -s 10.0.0.0/8     -j ANTI_SPOOFING__
+$IPTABLES -A ANTI_SPOOFING_ -s 172.16.0.0/12  -j ANTI_SPOOFING__
+$IPTABLES -A ANTI_SPOOFING_ -s 192.168.0.0/16 -j ANTI_SPOOFING__
+$IPTABLES -A ANTI_SPOOFING__ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES SPOOFING] : '
+$IPTABLES -A ANTI_SPOOFING__ -j TRACK_ATTACKER
+$IPTABLES -A ANTI_SPOOFING__ -j DROP
+$IPTABLES -A FIREWALL -j FW_SPOOFING && echo "FIREWALL	ANTI_SPOOFING"
+$IPTABLES -A FW_BASIC -j FW_SPOOFING
+
+# Registrar e descartar tentativas de conexão que excedam 10 vezes em 3 minutos para a porta de administração, considerando como NG (não permitido)
+# ※ Medidas contra ataques de força bruta (Brute Force)
+$IPTABLES -N FW_BRUTEFORCE 2>/dev/null
+$IPTABLES -N ANTI_BRUTEFORCE
+$IPTABLES -N ANTI_BRUTEFORCE_
+$IPTABLES -A FW_BRUTEFORCE -p tcp -m multiport --dports $LOGIN -j ANTI_BRUTEFORCE
+$IPTABLES -A ANTI_BRUTEFORCE -i e+ -p tcp -m state --state NEW -j ANTI_BRUTEFORCE_
+$IPTABLES -A ANTI_BRUTEFORCE -i p+ -p tcp -m state --state NEW -j ANTI_BRUTEFORCE_
+$IPTABLES -A ANTI_BRUTEFORCE -i w+ -p tcp -m state --state NEW -j ANTI_BRUTEFORCE_
+$IPTABLES -A ANTI_BRUTEFORCE_ \
+          -m hashlimit \
+          --hashlimit-name bruteforce \
+          --hashlimit 1/m \
+          --hashlimit-burst 7 \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 180000 \
+          -j RETURN
+$IPTABLES -A ANTI_BRUTEFORCE_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES BRUTEFORCE] : '
+$IPTABLES -A ANTI_BRUTEFORCE_ -j TRACK_ATTACKER
+$IPTABLES -A ANTI_BRUTEFORCE_ -j DROP
+$IPTABLES -A FIREWALL -j FW_BRUTEFORCE && echo "FIREWALL	ANTI_BRUTEFORCE"
+$IPTABLES -A FW_BASIC -j FW_BRUTEFORCE
+
+# Registrar e descartar pacotes de ping se excederem 4 vezes por segundo, considerando como NG (não permitido)
+# ※ Medidas contra ataques de Ping of Death
+$IPTABLES -N FW_PINGDEATH 2>/dev/null
+$IPTABLES -N ANTI_PINGDEATH
+$IPTABLES -N ANTI_PINGDEATH_
+$IPTABLES -A FW_PINGDEATH -i e+ -p icmp --icmp-type echo-request -j ANTI_PINGDEATH
+$IPTABLES -A FW_PINGDEATH -i p+ -p icmp --icmp-type echo-request -j ANTI_PINGDEATH
+$IPTABLES -A FW_PINGDEATH -i w+ -p icmp --icmp-type echo-request -j ANTI_PINGDEATH
+$IPTABLES -A ANTI_PINGDEATH -j ANTI_PINGDEATH_
+$IPTABLES -A ANTI_PINGDEATH_ \
+          -m hashlimit \
+          --hashlimit-name ping \
+          --hashlimit 1/s \
+          --hashlimit-burst 4 \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 1000 \
+          -j RETURN
+$IPTABLES -A ANTI_PINGDEATH_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES PINGDEATH] : '
+$IPTABLES -A ANTI_PINGDEATH_ -j TRACK_ATTACKER
+$IPTABLES -A ANTI_PINGDEATH_ -j DROP
+$IPTABLES -A FIREWALL -j FW_PINGDEATH && echo "FIREWALL	ANTI_PINGDEATH"
+
+# Restringir acessos excessivos por IP
+# ※ Medidas contra ataques SYN Flood (ajuste os valores conforme necessário)
+#
+# -m hashlimit                 : Utiliza o módulo hashlimit
+# --hashlimit-name name        : Nome da tabela de hash
+# --hashlimit n                : Limite de pacotes por segundo
+# --hashlimit-burst n          : Limite de pacotes em uma explosão
+# --hashlimit-mode hash        : Modo de identificação para contar como um único acesso
+# --hashlimit-htable-expire ms : Expiração dos registros na tabela de hash (em milissegundos)
+#
+# Registrar e descartar acessos excessivos à porta HTTP
+
+$IPTABLES -N FW_SYNFLOOD 2>/dev/null
+$IPTABLES -N ANTI_SYNFLOOD
+$IPTABLES -N ANTI_SYNFLOOD_
+$IPTABLES -A FW_SYNFLOOD -p tcp --dport 80 -j ANTI_SYNFLOOD
+$IPTABLES -A ANTI_SYNFLOOD -i e+ -p tcp -m state --state NEW -j ANTI_SYNFLOOD_
+$IPTABLES -A ANTI_SYNFLOOD -i p+ -p tcp -m state --state NEW -j ANTI_SYNFLOOD_
+$IPTABLES -A ANTI_SYNFLOOD -i w+ -p tcp -m state --state NEW -j ANTI_SYNFLOOD_
+$IPTABLES -A ANTI_SYNFLOOD_ \
+          -m hashlimit \
+          --hashlimit-name http \
+          --hashlimit 10/m \
+          --hashlimit-burst 60 \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 60000 \
+          -j RETURN
+$IPTABLES -A ANTI_SYNFLOOD_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES SYNFLOOD] : '
+$IPTABLES -A ANTI_SYNFLOOD_ -j DROP
+$IPTABLES -A FIREWALL -j FW_SYNFLOOD && echo "FIREWALL	ANTI_SYNFLOOD"
+
+# HTTPS - Registrar e descartar acessos excessivos à porta HTTPS
+$IPTABLES -N FW_SYNFLOOD_SSL 2>/dev/null
+$IPTABLES -N ANTI_SYNFLOOD_SSL
+$IPTABLES -N ANTI_SYNFLOOD_SSL_
+$IPTABLES -A FW_SYNFLOOD_SSL -p tcp --dport 443 -j ANTI_SYNFLOOD_SSL
+$IPTABLES -A ANTI_SYNFLOOD_SSL -i e+ -p tcp -m state --state NEW -j ANTI_SYNFLOOD_SSL_
+$IPTABLES -A ANTI_SYNFLOOD_SSL -i p+ -p tcp -m state --state NEW -j ANTI_SYNFLOOD_SSL_
+$IPTABLES -A ANTI_SYNFLOOD_SSL -i w+ -p tcp -m state --state NEW -j ANTI_SYNFLOOD_SSL_
+$IPTABLES -A ANTI_SYNFLOOD_SSL_ \
+          -m hashlimit \
+          --hashlimit-name https \
+          --hashlimit 30/m \
+          --hashlimit-burst 60 \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 60000 \
+          -j RETURN
+$IPTABLES -A ANTI_SYNFLOOD_SSL_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES SYNFLOOD(SSL)] : '
+$IPTABLES -A ANTI_SYNFLOOD_SSL_ -j DROP
+$IPTABLES -A FIREWALL -j FW_SYNFLOOD_SSL && echo "FIREWALL	ANTI_SYNFLOOD_SSL"
+
+# UDP - Registrar e descartar acessos excessivos por UDP, com registro no log
+$IPTABLES -N FW_UDPFLOOD 2>/dev/null
+$IPTABLES -N ANTI_UDPFLOOD
+$IPTABLES -N ANTI_UDPFLOOD_
+$IPTABLES -A FW_UDPFLOOD -j ANTI_UDPFLOOD
+$IPTABLES -A ANTI_UDPFLOOD -i e+ -p udp -m state --state NEW -j ANTI_UDPFLOOD_
+$IPTABLES -A ANTI_UDPFLOOD -i p+ -p udp -m state --state NEW -j ANTI_UDPFLOOD_
+$IPTABLES -A ANTI_UDPFLOOD -i w+ -p udp -m state --state NEW -j ANTI_UDPFLOOD_
+$IPTABLES -A ANTI_UDPFLOOD_ \
+          -m hashlimit \
+          --hashlimit-name udp \
+          --hashlimit 30/m \
+          --hashlimit-burst 60 \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 60000 \
+          -j RETURN
+$IPTABLES -A ANTI_UDPFLOOD_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES UDPFLOOD] : '
+$IPTABLES -A ANTI_UDPFLOOD_ -j DROP
+$IPTABLES -A FIREWALL -j FW_UDPFLOOD && echo "FIREWALL	ANTI_UDPFLOOD"
+
+# ICMP - Registrar e descartar acessos excessivos por ICMP, com registro no log
+$IPTABLES -N FW_ICMPFLOOD 2>/dev/null
+$IPTABLES -N ANTI_ICMPFLOOD
+$IPTABLES -N ANTI_ICMPFLOOD_
+$IPTABLES -A FW_ICMPFLOOD -j ANTI_ICMPFLOOD
+$IPTABLES -A ANTI_ICMPFLOOD -i e+ -p icmp -j ANTI_ICMPFLOOD_
+$IPTABLES -A ANTI_ICMPFLOOD -i p+ -p icmp -j ANTI_ICMPFLOOD_
+$IPTABLES -A ANTI_ICMPFLOOD -i w+ -p icmp -j ANTI_ICMPFLOOD_
+$IPTABLES -A ANTI_ICMPFLOOD_ \
+          -m hashlimit \
+          --hashlimit-name icmp \
+          --hashlimit 30/m \
+          --hashlimit-burst 60 \
+          --hashlimit-mode srcip \
+          --hashlimit-htable-expire 60000 \
+          -j RETURN
+$IPTABLES -A ANTI_ICMPFLOOD_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES ICMPFLOOD] : '
+$IPTABLES -A ANTI_ICMPFLOOD_ -j DROP
+$IPTABLES -A FIREWALL -j FW_ICMPFLOOD && echo "FIREWALL	ANTI_ICMPFLOOD"
+
+# Registrar e descartar pacotes para portas não abertas e não divulgadas, considerando como NG (não permitido)
+# ※ Medidas contra varreduras de portas
+# ※ Se tocar em uma porta não aberta pelo menos uma vez, está fora
+# ※ Pode ser desativado em servidores públicos
+
+$IPTABLES -N TRAP_PORTSCAN
+$IPTABLES -N ANTI_PORTSCAN
+$IPTABLES -N ANTI_PORTSCAN_
+$IPTABLES -A TRAP_PORTSCAN -j ANTI_PORTSCAN
+$IPTABLES -A ANTI_PORTSCAN -i e+ -j ANTI_PORTSCAN_
+$IPTABLES -A ANTI_PORTSCAN -i p+ -j ANTI_PORTSCAN_
+$IPTABLES -A ANTI_PORTSCAN -i w+ -j ANTI_PORTSCAN_
+$IPTABLES -A ANTI_PORTSCAN_ -j FW_BROADCAST
+$IPTABLES -A ANTI_PORTSCAN_ -j FW_MULTICAST
+$IPTABLES -A ANTI_PORTSCAN_ -m limit --limit $LOG_LIMIT --limit-burst $LOG_LIMIT_BURST -j LOG --log-level debug --log-prefix '[IPTABLES PORTSCAN] : '
+$IPTABLES -A ANTI_PORTSCAN_ -j TRACK_PROWLER
+
+#----------------------------------------------------------#
+# IDS/IPS                                                  #
+#----------------------------------------------------------#
+
+$IPTABLES -F IPS
+$IPTABLES -F IDS
+if [ $IDSIPS = Snort ]; then
+
+    # Analisar todas as comunicações ICMP
+    $IPTABLES -A IPS -p icmp -j NFQUEUE --queue-num 2
+
+    # Analisar todas as comunicações UDP
+    $IPTABLES -A IPS -p udp -j NFQUEUE --queue-num 2
+
+    # Analisar comunicações TCP
+    #$IPTABLES -A IPS -o eth+ -p tcp -j ACCEPT
+    #$IPTABLES -A IPS -o en+ -p tcp -j ACCEPT
+    $IPTABLES -A IPS -p tcp -j NFQUEUE --queue-num 2
+
+    # Analisar comunicações internas com servidores backend
+    #$IPTABLES -A IPS -i lo -p tcp --dport 9000 -j NFQUEUE --queue-num 2
+    #$IPTABLES -A IPS -o lo -p tcp --dport 9000 -j NFQUEUE --queue-num 2
+
+    echo "IDS/IPS		Snort"
+
+else
+    echo "IDS/IPS		DESATIVADO"
+fi
+#----------------------------------------------------------#
+# Funções                                                   #
+#----------------------------------------------------------#
+
+ARQUIVO_PARA_CADEIA(){
+    local ARQUIVO=$1
+    local NOME=$2
+    if [ "`$IPTABLES -S | grep "^-N $NOME$"`" ]; then
+        return 0
+    elif [ ! -r $ARQUIVO ]; then
+        return 1
+    fi
+    $IPTABLES -N $NOME
+    $IPTABLES -F $NOME
+    local ifs=$IFS
+    IFS=$'\n'
+    local LINHA
+    for LINHA in `eval "cat $ARQUIVO | $FORMATO"`
+    do
+        $IPTABLES -A $NOME -s $LINHA -j RETURN
+    done
+    IFS=$ifs
+    return 0
+}
+
+CONSTRUIR_REGRAS(){
+    local REGRA=$1
+    if [ `echo $REGRA | grep -E "^(ACCEPT|DROP|RETURN|(REJECT|LOG|NFQUEUE)( .*)?)$"` ]; then
+        REGRA=$REGRA
+    elif [ "`$IPTABLES -S | grep "^\(-N $REGRA$\|-P $REGRA \)"`" ]; then
+        REGRA=$REGRA
+    elif [ `echo $REGRA | grep -E ^[A-Z_]\+$` ]; then
+        $IPTABLES -N $REGRA
+        [ $? -ne 0 ] && REGRA=
+    else
+        local ARQUIVO=`echo $LIST_DIR$REGRA | sed 's|.*//|/|'`
+        if [ -r $ARQUIVO ]; then
+            REGRA=${REGRA##*/}
+            REGRA=`echo WL_$REGRA | cut -d. -f1 | tr '[a-z]' '[A-Z]'`
+            ARQUIVO_PARA_CADEIA $ARQUIVO $REGRA
+        else
+            REGRA=
+            [ $SECURE = false ]
+        fi
+        [ $? -ne 0 ] && REGRA=
+    fi
+    echo $REGRA
+}
+
+CONSTRUIR_PAPEL(){
+    local PAPEL
+    local REGRAS
+    local REGRA
+    for PAPEL in ${PAPEIS[@]}; do
+        $IPTABLES -N $PAPEL
+        eval REGRAS="\${${PAPEL}[@]}"
+        local LINHA=
+        for REGRA in ${REGRAS[@]}; do
+            local COMO_LISTA_BRANCA=
+            local ERRO=
+            if [ ! "`echo $REGRA | grep [,\|]`" ]; then
+                ERRO=$REGRA
+                REGRA=`CONSTRUIR_REGRAS $REGRA`
+                [ ! $REGRA ] && [ $SECURE != false ] && RESULT=1
+                if [ ! $REGRA ]; then [ $SECURE != false ] && echo "ERRO		$PAPEL[$ERRO]" >&2; continue; fi
+                COMO_LISTA_BRANCA=`echo $REGRA | grep ^WL_`
+                LINHA="${LINHA:+$LINHA }$REGRA"
+            else
+                local REGRAS_COMPOSTAS=(`eval echo ${REGRA//|/ }`)
+                local REGRAS_COMPOSTA
+                REGRA=`echo ${PAPEL}_${REGRAS_COMPOSTAS[0]##*/} | cut -d. -f1 | tr '[a-z]' '[A-Z]'`
+                $IPTABLES -N $REGRA
+                LINHA="${LINHA:+$LINHA }$REGRA("
+                for REGRAS_COMPOSTA in ${REGRAS_COMPOSTAS[@]}; do
+                    COMO_LISTA_BRANCA=
+                    ERRO=$REGRAS_COMPOSTA
+                    REGRAS_COMPOSTA=`CONSTRUIR_REGRAS $REGRAS_COMPOSTA`
+                    [ ! $REGRAS_COMPOSTA ] && [ $SECURE != false ] && RESULT=1
+                    if [ ! $REGRAS_COMPOSTA ]; then [ $SECURE != false ] && echo "ERRO		$PAPEL[$ERRO]" >&2; continue; fi
+                    LINHA="$LINHA$REGRAS_COMPOSTA,"
+                    local ifs=$IFS
+                    IFS=$'\n'
+                    if [ `echo $REGRAS_COMPOSTA | grep -E "^(ACCEPT|DROP|RETURN|(REJECT|LOG|NFQUEUE)( .*)?)$"` ]; then
+                        COMO_LISTA_BRANCA=${COMO_LISTA_BRANCA:+}
+                        eval "$IPTABLES -A $REGRA -j $REGRAS_COMPOSTA"
+                    elif [ `echo $REGRAS_COMPOSTA | grep ^WL_` ]; then
+                        COMO_LISTA_BRANCA=${COMO_LISTA_BRANCA:-1}
+                        for REGRAS_COMPOSTA in `$IPTABLES -S ${REGRAS_COMPOSTA} | grep ' -j RETURN' | sed -e 's/^-A[^-]*//'`; do
+                            eval "$IPTABLES -A $REGRA $REGRAS_COMPOSTA"
+                        done
+                    else
+                        COMO_LISTA_BRANCA=${COMO_LISTA_BRANCA:+}
+                        for REGRAS_COMPOSTA in `$IPTABLES -S ${REGRAS_COMPOSTA} | grep '^-[AI] ' | sed -e 's/^-A[^-]*//'`; do
+                            eval "$IPTABLES -A $REGRA $REGRAS_COMPOSTA"
+                        done
+                    fi
+                    IFS=$ifs
+                done
+                LINHA="${LINHA%,})"
+            fi
+            eval "$IPTABLES -A $PAPEL -j $REGRA"
+            if [ $COMO_LISTA_BRANCA ]; then
+                $IPTABLES -A $REGRA -j TRACK_PROWLER
+                $IPTABLES -A $REGRA -j DROP
+            fi
+        done
+        eval REGRAS="\${${PAPEL}[@]}"
+        echo "CONFIGURAÇÃO_PAPEL	$PAPEL[$(echo "${REGRAS[@]}")]"
+        echo "APLICAÇÃO_PAPEL	$PAPEL[$LINHA]"
+    done
+}
+CONSTRUIR_PAPEL
+
+#----------------------------------------------------------#
+# Mapeamento                                                #
+#----------------------------------------------------------#
+
+MAPEAMENTO(){
+    local PARAM
+    local ifs=$IFS
+    IFS=$'\n'
+    for PARAM in ${MAP[@]}; do
+        eval "$IPTABLES -A $PARAM"
+        echo "MAPEAMENTO	$PARAM"
+    done
+    IFS=$ifs
+}
+MAPEAMENTO
+
+#----------------------------------------------------------#
+# PAÍS                                                      #
+#----------------------------------------------------------#
+
+CIDR_CONTAGEM_LISTA=()
+declare -A CIDR_TABELA
+for ((CIDR=32;0<CIDR;CIDR--))
+do
+    CIDR_CONTAGEM=$((2**(32-$CIDR)))
+    CIDR_CONTAGEM_LISTA=($CIDR_CONTAGEM "${CIDR_CONTAGEM_LISTA[@]}")
+    CIDR_TABELA[$CIDR_CONTAGEM]=$CIDR
+done
+
+CONTAGEM_PARA_CIDR(){
+    local CONTAGEM=$1
+    local CIDR_CONTAGEM
+    for CIDR_CONTAGEM in ${CIDR_CONTAGEM_LISTA[@]}
+    do
+        if [ $CIDR_CONTAGEM -gt $CONTAGEM ]; then continue;fi
+        local CIDR=${CIDR_TABELA[$CIDR_CONTAGEM]}
+        break
+    done
+    echo $CIDR
+}
+CIDR_PARA_CONTAGEM(){
+    local CIDR=$1
+    local CONTAGEM=$((2**(32-$CIDR)))
+    echo $CONTAGEM
+}
+SHIFT_ENDERECO(){
+    local ENDERECO=$1
+    local CONTAGEM=$2
+    local D1=$(($CONTAGEM/(256**3)))
+    [ $D1 -ne 0 ] && CONTAGEM=0
+    local D2=$(($CONTAGEM/(256**2)))
+    [ $D2 -ne 0 ] && CONTAGEM=0
+    local D3=$(($CONTAGEM/(256**1)))
+    [ $D3 -ne 0 ] && CONTAGEM=0
+    local D4=$(($CONTAGEM/(256**0)))
+    ENDERECO=`echo $ENDERECO | awk -v D1=$D1 -v D2=$D2 -v D3=$D3 -v D4=$D4 -F"." '{ print $1+D1 "." $2+D2 "." $3+D3 "." $4+D4 }'`
+    echo $ENDERECO
+}
+
+CONSTRUIR_PAIS(){
+    if [ ! -s $CACHE_DIR$1 ] || [ ! $2 -a ! $3 ];then return;fi
+    echo "CARREGAR	$1"
+    local LINHA
+    awk -F '|' -v code1="$2" -v code2="$3" '
+    $3 == "ipv4" && ($2 ~ code1 || $2 ~ code2) {
+        action = ""
+        if (code1 != "" && $2 ~ code1) action = "ACEITAR"
+        else if (code2 != "" && $2 ~ code2) action = "REJEITAR"
+
+        if (action != "") {
+             print action "|" $2 "|" $4 "|" $5 "|" $0
+        }
+    }' "$CACHE_DIR$1" | while IFS='|' read -r ACTION CODIGO ENDERECO CONTAGEM LINHA; do
+        if [ "$ACTION" == "ACEITAR" ]; then
+             CONSTRUIR_REGRA_PAIS "$ENDERECO" "$CONTAGEM" CONSTRUIR_REGRA_PAIS_ACEITAR
+             printf "%-10s%-4s%-20s%s\n" ACEITAR "$CODIGO" "$ENDERECO/$?" "$LINHA"
+        elif [ "$ACTION" == "REJEITAR" ]; then
+             CONSTRUIR_REGRA_PAIS "$ENDERECO" "$CONTAGEM" CONSTRUIR_REGRA_PAIS_REJEITAR
+             printf "%-10s%-4s%-20s%s\n" REJEITAR "$CODIGO" "$ENDERECO/$?" "$LINHA"
+        fi
+    done
+}
+CONSTRUIR_REGRA_PAIS(){
+    local ENDERECO=$1
+    local CONTAGEM=$2
+    local RETORNO=$3
+    local CIDR=`CONTAGEM_PARA_CIDR $CONTAGEM`
+    eval "$RETORNO $ENDERECO $CIDR"
+
+    local REM=$(($CONTAGEM-`CIDR_PARA_CONTAGEM $CIDR`))
+    if [ $REM -gt 0 ]; then
+        ENDERECO=`SHIFT_ENDERECO $ENDERECO $(CIDR_PARA_CONTAGEM $CIDR)`
+        CONSTRUIR_REGRA_PAIS $ENDERECO $REM $RETORNO
+    fi
+    return $CIDR
+}
+CONSTRUIR_REGRA_PAIS_ACEITAR(){
+    local ENDERECO=$1
+    local CIDR=$2
+    $IPTABLES -A PAIS_LOCAL -s $ENDERECO/$CIDR -j RETURN
+}
+CONSTRUIR_REGRA_PAIS_REJEITAR(){
+    local ENDERECO=$1
+    local CIDR=$2
+    $IPTABLES -A PAIS_BLOQUEAR -s $ENDERECO/$CIDR -j DROP
+}
+
+if [ $RESET -ne 0 ] || [ ! -z "$PAIS_LOCAL_CODIGO" -a $($IPTABLES -S PAIS_LOCAL 2>/dev/null | awk 'END{print NR}') -le 2 ] || [ ! -z "$PAIS_BLOQUEAR_CODIGO" -a $($IPTABLES -S PAIS_BLOQUEAR 2>/dev/null | awk 'END{print NR}') -le 2 ]; then
+    echo "CONSTRUIR		Cadeia PAIS_LOCAL"
+    echo "CONSTRUIR		Cadeia PAIS_BLOQUEAR"
+
+    $IPTABLES -F PAIS_LOCAL
+    $IPTABLES -A PAIS_LOCAL -i lo -j RETURN
+    $IPTABLES -A PAIS_LOCAL -o lo -j RETURN
+
+    $IPTABLES -F PAIS_BLOQUEAR
+    $IPTABLES -A PAIS_BLOQUEAR -i lo -j RETURN
+    $IPTABLES -A PAIS_BLOQUEAR -o lo -j RETURN
+
+    # SEGURO
+    if [ $SECURE != false ]; then
+      $IPTABLES -I PAIS_LOCAL -j DROP
+      $IPTABLES -I PAIS_BLOQUEAR -j DROP
+    else
+      $IPTABLES -I PAIS_LOCAL -j RETURN
+      $IPTABLES -I PAIS_BLOQUEAR -j RETURN
+    fi
+
+    CONSTRUIR_PAIS "delegated-apnic-extended-latest"   $PAIS_LOCAL_CODIGO $PAIS_BLOQUEAR_CODIGO
+    CONSTRUIR_PAIS "delegated-arin-extended-latest"    $PAIS_LOCAL_CODIGO $PAIS_BLOQUEAR_CODIGO
+    CONSTRUIR_PAIS "delegated-ripencc-extended-latest" $PAIS_LOCAL_CODIGO $PAIS_BLOQUEAR_CODIGO
+    CONSTRUIR_PAIS "delegated-lacnic-extended-latest"  $PAIS_LOCAL_CODIGO $PAIS_BLOQUEAR_CODIGO
+    CONSTRUIR_PAIS "delegated-afrinic-extended-latest" $PAIS_LOCAL_CODIGO $PAIS_BLOQUEAR_CODIGO
+
+    $IPTABLES -A PAIS_LOCAL -j DROP
+
+    # Remover configuração temporária
+    $IPTABLES -D PAIS_LOCAL 1 2>/dev/null
+    $IPTABLES -D PAIS_BLOQUEAR 1 2>/dev/null
+
+else
+    [ $PAIS_LOCAL_CODIGO ] && echo "REUTILIZAR		Cadeia PAIS_LOCAL"
+    [ $PAIS_BLOQUEAR_CODIGO ] && echo "REUTILIZAR		Cadeia PAIS_BLOQUEAR"
+fi
+#----------------------------------------------------------#
+# Pós-processamento                                        #
+#----------------------------------------------------------#
+
+# PÓS-PROCESSAMENTO
+echo "PÓS-PROCESSAMENTO	$PÓS-PROCESSAMENTO"
+`$PÓS-PROCESSAMENTO`
+
+#----------------------------------------------------------#
+# Finalização                                              #
+#----------------------------------------------------------#
+
+# Salvando configurações (as configurações existentes em /etc/sysconfig/iptables serão removidas)
+[ $RESULT -eq 0 ] && echo "RESULTADO		Sucesso" || echo "RESULTADO		Falha"
+echo "Pressione Enter ou y > salvar, n ou timeout > reverter"
+read -t 60 input
+if [ $? -eq 0 ] && [ "$input" != n ]; then
+    service iptables save
+    sysctl -p 2>&1 | grep -v -E "^error:.*(ipv6|bridge-nf-call)"
+    service rsyslog restart
+else
+    service iptables restart
+fi
+
+echo completo
+
+exit $RESULT

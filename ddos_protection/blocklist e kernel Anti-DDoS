@@ -1,0 +1,205 @@
+#!/bin/bash
+
+# Firewall iptables para o site https://cyber-gamers.org/
+
+# @versão 1.0.1
+# @autor poweroff (fixed by AI)
+# @testado contra ataques DDoS pela comunidade
+# @site https://cyber-gamers.org/
+
+# Este script implementa um firewall utilizando o iptables para proteger o servidor associado ao site Cyber Gamers.
+# Foi desenvolvido pelo a poweroff e testado contra ataques DDoS pela comunidade.
+# Mais informações sobre o projeto podem ser encontradas em https://cyber-gamers.org/
+
+# Nota: Certifique-se de rever e personalizar as regras do iptables de acordo com os requisitos específicos do
+# seu ambiente antes de implementar este script em produção.
+
+#----------------------------------------------------------#
+# Proteção Anti-DDoS: Reforçando o Primeiro Layer           #
+#----------------------------------------------------------#
+
+
+# Lista de URLs dos serviços de blocklist
+declare -A blocklist_urls=(
+    ["all"]="https://lists.blocklist.de/lists/all.txt"
+    ["bruteforcelogin"]="https://lists.blocklist.de/lists/bruteforcelogin.txt"
+    ["mail"]="https://lists.blocklist.de/lists/mail.txt"
+    ["firehol1"]="https://iplists.firehol.org/files/firehol_level1.netset"
+    ["firehol2"]="https://iplists.firehol.org/files/firehol_level2.netset"
+    ["firehol3"]="https://iplists.firehol.org/files/firehol_level3.netset"
+    ["firehol4"]="https://iplists.firehol.org/files/firehol_level4.netset"
+    ["firehol_web"]="https://iplists.firehol.org/files/firehol_webclient.netset"
+    ["firehol_proxies"]="https://iplists.firehol.org/files/firehol_proxies.netset"
+    ["spamhaus"]="https://www.spamhaus.org/drop/drop.txt"
+    ["blocklist_de"]="https://lists.blocklist.de/lists/zbdl.txt"
+    ["emergingthreats"]="https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt"
+    ["binarydefense"]="https://www.binarydefense.com/banlist.txt"
+    ["feodo"]="https://feodotracker.abuse.ch/blocklist/?download=ipblocklist"
+    ["ransomwaretracker"]="https://ransomwaretracker.abuse.ch/downloads/RW_IPBL.txt"
+    ["autoshun"]="https://www.autoshun.org/files/shunlist.csv"
+    ["dshield"]="https://www.dshield.org/ipsascii.html"
+    ["zeustracker"]="https://zeustracker.abuse.ch/blocklist.php?download=ipblocklist"
+    ["herrbischoff"]="https://raw.githubusercontent.com/herrbischoff/awesome-ipsum/master/ips.txt"
+    ["malc0de"]="http://malc0de.com/bl/IP_Blacklist.txt"
+    ["malwaredomainlist"]="https://www.malwaredomainlist.com/hostslist/ip.txt"
+    ["openbl"]="https://www.openbl.org/lists/base.txt"
+    ["ciarmy"]="http://cinsscore.com/list/ci-badguys.txt"
+    ["blocklist_net_ua"]="https://blocklist.net.ua/blocklist.csv"
+    ["blocklist_ru"]="https://www.blocklist.de/downloads/export-ips_all.txt"
+    ["blocklist_top"]="https://lists.blocklist.de/lists/top-100.txt"
+    ["blocklist_ips"]="https://lists.blocklist.de/lists/ips.txt"
+    ["blocklist_edu"]="https://lists.blocklist.de/lists/edu.txt"
+    ["blocklist_psh"]="https://lists.blocklist.de/lists/psh.txt"
+)
+
+# Lista de países a permitir
+countries_to_allow=("PT" "BR" "US")  # Substitua pelos códigos dos países que deseja permitir
+
+# Diretório onde as listas serão GUARDADAS
+blocklist_dir="/tmp/blocklists"
+# Arquivos temporários
+temp_file_allow="/tmp/allow_list_temp.txt"
+temp_file_block="/tmp/block_list_temp.txt"
+
+# Função para verificar e criar diretórios, se necessário
+check_and_create_directory() {
+    if [ ! -d "$1" ]; then
+        mkdir -p "$1"
+    fi
+}
+
+# Função para permitir tráfego de certos países
+allow_countries() {
+    echo "Baixando listas de países permitidos..."
+    > "$temp_file_allow" # Limpa arquivo
+
+    # Baixa as listas de IP por país do ipdeny
+    for country_code in "${countries_to_allow[@]}"; do
+        # Converter para minúsculo para a URL
+        cc_lower=$(echo "$country_code" | tr '[:upper:]' '[:lower:]')
+        ipdeny_url="http://www.ipdeny.com/ipblocks/data/countries/$cc_lower.zone"
+        echo "Baixando $ipdeny_url..."
+        curl -sS "$ipdeny_url" | grep -vE '^(#|$)' >> "$temp_file_allow"
+        if [ $? -ne 0 ]; then
+            echo "Aviso: Falha ao baixar a lista de IPs para o país $country_code"
+        fi
+    done
+
+    # Aplica regras ACCEPT
+    if [ -f "$temp_file_allow" ]; then
+        echo "Aplicando regras de permissão (ACCEPT)..."
+        while read -r ip; do
+            # Verificar se é um IP válido (básico)
+            if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                iptables -A INPUT -s "$ip" -j ACCEPT
+            fi
+        done < "$temp_file_allow"
+        rm "$temp_file_allow"
+    fi
+}
+
+# Função para bloquear listas conhecidas
+block_malicious_lists() {
+    echo "Baixando listas de bloqueio (Blacklists)..."
+    > "$temp_file_block" # Limpa arquivo
+
+    # Itera sobre as URLs e baixa as listas
+    for service in "${!blocklist_urls[@]}"; do
+        echo "Baixando $service..."
+        curl -sS "${blocklist_urls[$service]}" >> "$temp_file_block"
+        if [ $? -ne 0 ]; then
+            echo "Aviso: Falha ao baixar a lista $service"
+        fi
+    done
+
+    # Remove duplicatas e ordena a lista
+    sort -u "$temp_file_block" > "$blocklist_dir/blocklist_combined.txt"
+    rm "$temp_file_block"
+
+    # Atualiza as regras do iptables com os IPs da blocklist
+    if [ -f "$blocklist_dir/blocklist_combined.txt" ]; then
+        echo "Aplicando regras de bloqueio (DROP)..."
+        while read -r ip; do
+            # Verificar se é um IP válido (básico)
+             if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                iptables -A INPUT -s "$ip" -j DROP
+            fi
+        done < "$blocklist_dir/blocklist_combined.txt"
+    fi
+}
+
+# Verifica e cria os diretórios necessários
+check_and_create_directory "$blocklist_dir"
+
+# Limpar regras antigas (Opcional, mas recomendado para evitar duplicatas ao rodar novamente)
+# iptables -F # Cuidado: isso limpa TUDO. Deixarei comentado.
+
+# Executa a função para permitir tráfego de certos países
+allow_countries
+
+# Executa a função para bloquear listas maliciosas
+block_malicious_lists
+
+# Registra o log de atividades
+timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+echo "Script executado em $timestamp"
+echo "Listas download:"
+for service in "${!blocklist_urls[@]}"; do
+    echo "${blocklist_urls[$service]}"
+done
+echo "Número de IPS bloqueados: $(wc -l "$blocklist_dir/blocklist_combined.txt" 2>/dev/null || echo 0)"
+
+#----------------------------------------------------------#
+#   Firewall kernel Anti-DDoS: Reforçando /sysctl.conf     #
+#----------------------------------------------------------#
+
+
+# Prevenção de falsificação do endereço IP de origem
+sed -i '/net.ipv4.conf.*.rp_filter/d' /etc/sysctl.conf
+for dev in $(ls /proc/sys/net/ipv4/conf/); do
+    sysctl -w net.ipv4.conf.$dev.rp_filter=1 > /dev/null
+    echo "net.ipv4.conf.$dev.rp_filter=1"
+done >> /etc/sysctl.conf
+
+# Recusar pacotes ICMP Redirect
+sed -i '/net.ipv4.conf.*.accept_redirects/d' /etc/sysctl.conf
+for dev in $(ls /proc/sys/net/ipv4/conf/); do
+    sysctl -w net.ipv4.conf.$dev.accept_redirects=0 > /dev/null
+    echo "net.ipv4.conf.$dev.accept_redirects=0"
+done >> /etc/sysctl.conf
+
+# Recusar pacotes com roteamento de origem (Source Routed)
+sed -i '/net.ipv4.conf.*.accept_source_route/d' /etc/sysctl.conf
+for dev in $(ls /proc/sys/net/ipv4/conf/); do
+    sysctl -w net.ipv4.conf.$dev.accept_source_route=0 > /dev/null
+    echo "net.ipv4.conf.$dev.accept_source_route=0"
+done >> /etc/sysctl.conf
+
+# Não responder a pings direcionados ao endereço de broadcast
+# ※ Medida contra ataques de Smurf
+sysctl -w net.ipv4.icmp_echo_ignore_broadcasts=1 > /dev/null
+sed -i '/net.ipv4.icmp_echo_ignore_broadcasts/d' /etc/sysctl.conf
+echo "net.ipv4.icmp_echo_ignore_broadcasts=1" >> /etc/sysctl.conf
+
+# Ativar SYN Cookies
+# ※ Medida contra ataques de TCP SYN Flood
+sysctl -w net.ipv4.tcp_syncookies=1 > /dev/null
+sed -i '/net.ipv4.tcp_syncookies/d' /etc/sysctl.conf
+echo "net.ipv4.tcp_syncookies=1" >> /etc/sysctl.conf
+
+# Não notificar o tempo contínuo de operação do sistema
+# ※ Medida contra identificação da versão do kernel
+sysctl -w net.ipv4.tcp_timestamps=1 > /dev/null
+sed -i '/net.ipv4.tcp_timestamps/d' /etc/sysctl.conf
+echo "net.ipv4.tcp_timestamps=1" >> /etc/sysctl.conf
+
+
+#----------------------------------------------------------#
+#      VERSÃO PRO - Exemplo de Camadas (Layer):     
+# Layer1: Bloqueio de países.
+# Layer2: Regras específicas para o SSH, incluindo bloqueio baseado em arquivos e rastreamento de atividades.
+# Layer3: Bloqueio de tráfego de países locais.
+# Layer4: Regras de firewall.
+# Layer5: Aplica Anti-Prowler/Atacker.
+# Layer6: Sistema de Detecção e Prevenção de Intrusões (IDS/IPS), com a capacidade de registar, alertar ou descartar pacotes.
+#----------------------------------------------------------#

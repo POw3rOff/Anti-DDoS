@@ -1,0 +1,52 @@
+# Fail2Ban Local Configuration
+# Created by Jules (AI Agent)
+
+[DEFAULT]
+# Banir IPs por 1 hora
+bantime = 1h
+# Procurar tentativas nos últimos 10 minutos
+findtime = 10m
+# Banir após 5 tentativas falhas
+maxretry = 5
+
+# Backend "auto" detecta se usa systemd ou log files
+backend = auto
+
+# Não banir localhost ou IPs confiáveis
+ignoreip = 127.0.0.1/8 ::1
+
+[sshd]
+enabled = true
+port    = ssh
+filter  = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 3h
+
+# --- Regras Avançadas ---
+
+# Jail Recidive: Para quem insiste em atacar.
+# Se um IP for banido pelo Fail2Ban 3 vezes no mesmo dia,
+# ele será banido por 1 semana.
+[recidive]
+enabled  = true
+logpath  = /var/log/fail2ban.log
+filter   = recidive
+banaction = iptables-allports
+bantime  = 1w
+findtime = 1d
+maxretry = 3
+
+# Proteção Nginx (Exemplo - requer configuração do filtro e logs)
+# [nginx-http-auth]
+# enabled = true
+# filter  = nginx-http-auth
+# port    = http,https
+# logpath = /var/log/nginx/error.log
+
+# [nginx-botsearch]
+# enabled = true
+# filter  = nginx-botsearch
+# port    = http,https
+# logpath = /var/log/nginx/access.log
+# maxretry = 2

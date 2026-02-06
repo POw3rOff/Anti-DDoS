@@ -1,0 +1,238 @@
+#!/bin/bash
+
+############ EXTRA STUFF TO HELP HIGH TRAFFIC (DDOS) ##################
+
+###################################################################################################################
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__        IPTables: Linux's Main line of Defense               ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|        IPTables: Linux's way of saying no to DoS kids       ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__                                                             ##    
+# _|___|___|___|___|___|___|___|___|___|___|___|___|        Version 1.0.0 -                                      ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__        IPTables Script created by p0w3r0ff                  ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__        Sources used and Studied;                            ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__     http://ipset.netfilter.org/iptables.man.html            ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__                                                             ##
+###################################################################################################################
+
+# Configurações do kernel usando sysctl
+# Comentários detalhados frente de cada função
+
+# Define o nível de mensagens do kernel a serem impressas. No exemplo, as mensagens de nível 4 e abaixo serão impressas.
+sysctl -w kernel.printk="4 4 1 7" # Define o nível de mensagens do kernel
+
+# Define o tempo em segundos que o kernel espera antes de reiniciar automaticamente após um pânico.
+sysctl -w kernel.panic=10 # Tempo de espera antes de reiniciar após um pânico
+
+# Habilita ou desabilita as teclas SysRq. Se definido como 1, as teclas SysRq estão habilitadas.
+sysctl -w kernel.sysrq=0 # Habilita/Desabilita as teclas SysRq
+
+# Define o tamanho máximo do segmento de memória compartilhada.
+sysctl -w kernel.shmmax=4294967296 # Tamanho máximo do segmento de memória compartilhada
+
+# Define a quantidade total de memória compartilhada disponível.
+sysctl -w kernel.shmall=4194304 # Quantidade total de memória compartilhada disponível
+
+# Permite que núcleos de dumps utilizem PID no nome do arquivo de dump.
+sysctl -w kernel.core_uses_pid=1 # Utiliza PID no nome do arquivo de dump
+
+# Define o tamanho máximo das mensagens IPC que podem ser recebidas.
+sysctl -w kernel.msgmnb=65536 # Tamanho máximo das mensagens IPC recebidas
+
+# Define o tamanho máximo das mensagens IPC que podem ser enviadas.
+sysctl -w kernel.msgmax=65536 # Tamanho máximo das mensagens IPC enviadas
+
+# Controla a troca de páginas. Um valor menor indica que o kernel deve tentar manter mais páginas de dados e instruções em RAM.
+sysctl -w vm.swappiness=20 # Controle da troca de páginas
+
+# Configura o quanto de memória suja (conteúdo modificado) pode ser mantido antes que o sistema comece a escrever páginas sujas em disco.
+sysctl -w vm.dirty_ratio=80
+sysctl -w vm.dirty_background_ratio=5 # Configuração de memória suja
+
+# Define o número máximo de identificadores de arquivo (file descriptors) que o sistema pode alocar.
+sysctl -w fs.file-max=2097152 # Número máximo de file descriptors
+
+# Define o tamanho máximo da fila de entrada do dispositivo de rede.
+sysctl -w net.core.netdev_max_backlog=262144 # Tamanho máximo da fila de entrada do dispositivo de rede
+
+# Define o tamanho máximo do buffer de recebimento padrão para sockets.
+sysctl -w net.core.rmem_default=31457280 # Tamanho máximo do buffer de recebimento padrão
+
+# Define o tamanho máximo do buffer de recebimento para sockets.
+sysctl -w net.core.rmem_max=67108864 # Tamanho máximo do buffer de recebimento
+
+# Define o tamanho padrão do buffer de envio para sockets.
+sysctl -w net.core.wmem_default=31457280 # Tamanho padrão do buffer de envio
+
+# Define o tamanho máximo do buffer de envio para sockets.
+sysctl -w net.core.wmem_max=67108864 # Tamanho máximo do buffer de envio
+
+# Define o número máximo de conexões pendentes que podem ser enfileiradas.
+sysctl -w net.core.somaxconn=65535 # Número máximo de conexões pendentes
+
+# Define o tamanho máximo do pool de memória por soquete.
+sysctl -w net.core.optmem_max=25165824 # Tamanho máximo do pool de memória por soquete
+
+# Define a quantidade mínima de entrada de vizinho (neighbor) para que uma entrada seja considerada válida.
+sysctl -w net.ipv4.neigh.default.gc_thresh1=4096 # Quantidade mínima de entrada de vizinho
+
+# Define a quantidade intermediária de entrada de vizinho para que uma entrada seja considerada válida.
+sysctl -w net.ipv4.neigh.default.gc_thresh2=8192 # Quantidade intermediária de entrada de vizinho
+
+# Define a quantidade máxima de entrada de vizinho para que uma entrada seja considerada válida.
+sysctl -w net.ipv4.neigh.default.gc_thresh3=16384 # Quantidade máxima de entrada de vizinho
+
+# Define o intervalo em segundos no qual o coletor de entrada de vizinho é executado.
+sysctl -w net.ipv4.neigh.default.gc_interval=5 # Intervalo para execução do coletor de entrada de vizinho
+
+# Define o tempo em segundos que uma entrada de vizinho pode ficar na tabela sem ser acessada antes de ser removida.
+sysctl -w net.ipv4.neigh.default.gc_stale_time=120 # Tempo antes de uma entrada de vizinho ser removida
+
+# Define o número máximo de conexões de acompanhamento de conexão que o sistema pode ter.
+sysctl -w net.netfilter.nf_conntrack_max=10000000 # Número máximo de conexões de acompanhamento
+
+# Ativa ou desativa a verificação de pacotes TCP "loose". Quando desativado (0), a verificação é mais rigorosa.
+sysctl -w net.netfilter.nf_conntrack_tcp_loose=0 # Verificação de pacotes TCP "loose"
+
+# Define o tempo, em segundos, que uma conexão TCP estabelecida pode permanecer ociosa antes de ser fechada.
+sysctl -w net.netfilter.nf_conntrack_tcp_timeout_established=1800 # Tempo de ociosidade para conexões TCP estabelecidas
+
+# Define o tempo, em segundos, que uma conexão TCP pode permanecer ociosa antes de ser fechada.
+sysctl -w net.netfilter.nf_conntrack_tcp_timeout_close=10 # Tempo de ociosidade para conexões TCP fechadas
+
+# Define o tempo, em segundos, que uma conexão TCP em estado CLOSE_WAIT pode permanecer ociosa antes de ser fechada.
+sysctl -w net.netfilter.nf_conntrack_tcp_timeout_close_wait=10 # Tempo de ociosidade para conexões TCP em CLOSE_WAIT
+
+# Define o tempo, em segundos, que uma conexão TCP em estado FIN_WAIT pode permanecer ociosa antes de ser fechada.
+sysctl -w net.netfilter.nf_conntrack_tcp_timeout_fin_wait=20 # Tempo de ociosidade para conexões TCP em FIN_WAIT
+
+# Define o tempo, em segundos, que uma conexão TCP em estado LAST_ACK pode permanecer ociosa antes de ser fechada.
+sysctl -w net.netfilter.nf_conntrack_tcp_timeout_last_ack=20 # Tempo de ociosidade para conexões TCP em LAST_ACK
+
+# Define o tempo, em segundos, que uma conexão TCP em estado SYN_RECV pode permanecer ociosa antes de ser fechada.
+sysctl -w net.netfilter.nf_conntrack_tcp_timeout_syn_recv=20 # Tempo de ociosidade para conexões TCP em SYN_RECV
+
+# Define o tempo, em segundos, que uma conexão TCP em estado SYN_SENT pode permanecer ociosa antes de ser fechada.
+sysctl -w net.netfilter.nf_conntrack_tcp_timeout_syn_sent=20 # Tempo de ociosidade para conexões TCP em SYN_SENT
+
+# Define o tempo, em segundos, que uma conexão TCP em estado TIME_WAIT pode permanecer ociosa antes de ser fechada.
+sysctl -w net.netfilter.nf_conntrack_tcp_timeout_time_wait=10 # Tempo de ociosidade para conexões TCP em TIME_WAIT
+
+# Desativa o TCP slow start após períodos de inatividade.
+sysctl -w net.ipv4.tcp_slow_start_after_idle=0 # Desativa o TCP slow start após períodos de inatividade
+
+# Define o intervalo de portas locais disponíveis para alocação dinâmica.
+sysctl -w net.ipv4.ip_local_port_range="1024 65000" # Intervalo de portas locais disponíveis
+
+# Evita a descoberta de MTU (Maximum Transmission Unit) para conexões IPv4.
+sysctl -w net.ipv4.ip_no_pmtu_disc=1 # Evita a descoberta de MTU para conexões IPv4
+
+# Limpa todas as rotas do kernel.
+sysctl -w net.ipv4.route.flush=1 # Limpa todas as rotas do kernel
+
+# Define o tamanho máximo da tabela de roteamento.
+sysctl -w net.ipv4.route.max_size=8048576 # Tamanho máximo da tabela de roteamento
+
+# Ignora pacotes de echo broadcast ICMP.
+sysctl -w net.ipv4.icmp_echo_ignore_broadcasts=1 # Ignora pacotes de echo broadcast ICMP
+
+# Ignora respostas de erro ICMP (como mensagens de "host unreachable").
+sysctl -w net.ipv4.icmp_ignore_bogus_error_responses=1 # Ignora respostas de erro ICMP
+
+# Define o algoritmo de controle de congestionamento TCP.
+sysctl -w net.ipv4.tcp_congestion_control=htcp # Algoritmo de controle de congestionamento TCP
+
+# Define os limites de memória alocada para o TCP.
+sysctl -w net.ipv4.tcp_mem="65536 131072 262144" # Limites de memória alocada para o TCP
+
+# Define os limites de memória alocada para o UDP.
+sysctl -w net.ipv4.udp_mem="65536 131072 262144" # Limites de memória alocada para o UDP
+
+# Define os tamanhos de buffer de recebimento para o TCP.
+sysctl -w net.ipv4.tcp_rmem="4096 87380 33554432" # Tamanhos de buffer de recebimento para o TCP
+
+# Define o tamanho mínimo do buffer de recebimento para o UDP.
+sysctl -w net.ipv4.udp_rmem_min=16384 # Tamanho mínimo do buffer de recebimento para o UDP
+
+# Define os tamanhos de buffer de envio para o TCP.
+sysctl -w net.ipv4.tcp_wmem="4096 87380 33554432" # Tamanhos de buffer de envio para o TCP
+
+# Define o tamanho mínimo do buffer de envio para o UDP.
+sysctl -w net.ipv4.udp_wmem_min=16384 # Tamanho mínimo do buffer de envio para o UDP
+
+# Define o número máximo de buckets da tabela de temporizadores TCP.
+sysctl -w net.ipv4.tcp_max_tw_buckets=1440000 # Número máximo de buckets da tabela de temporizadores TCP
+
+# Ativa ou desativa a reutilização de sockets TIME_WAIT.
+sysctl -w net.ipv4.tcp_tw_recycle=0 # Reutilização de sockets TIME_WAIT
+
+# Ativa ou desativa a reutilização de sockets TIME_WAIT se o socket estiver ocioso.
+sysctl -w net.ipv4.tcp_tw_reuse=1 # Reutilização de sockets TIME_WAIT se o socket estiver ocioso
+
+# Define o número máximo de sockets órfãos permitidos.
+sysctl -w net.ipv4.tcp_max_orphans=400000 # Número máximo de sockets órfãos permitidos
+
+# Ativa ou desativa a escalabilidade da janela TCP (TCP window scaling).
+sysctl -w net.ipv4.tcp_window_scaling=1 # Ativa a escalabilidade da janela TCP
+
+# Ativa ou desativa a implementação RFC 1337 para proteção contra ataques TCP.
+sysctl -w net.ipv4.tcp_rfc1337=1 # Implementação RFC 1337 para proteção contra ataques TCP
+
+# Ativa ou desativa o uso de cookies SYN para proteção contra ataques de SYN flooding.
+sysctl -w net.ipv4.tcp_syncookies=1 # Uso de cookies SYN para proteção contra ataques de SYN flooding
+
+# Define o número de retransmissões SYNACK antes de desistir.
+sysctl -w net.ipv4.tcp_synack_retries=1 # Número de retransmissões SYNACK
+
+# Define o número de retransmissões SYN antes de desistir.
+sysctl -w net.ipv4.tcp_syn_retries=2 # Número de retransmissões SYN
+
+# Define o número máximo de conexões SYN pendentes.
+sysctl -w net.ipv4.tcp_max_syn_backlog=16384 # Número máximo de conexões SYN pendentes
+
+# Ativa ou desativa a marcação de tempo TCP.
+sysctl -w net.ipv4.tcp_timestamps=1 # Marcação de tempo TCP
+
+# Ativa ou desativa a SACK (Selective Acknowledgment).
+sysctl -w net.ipv4.tcp_sack=1 # SACK (Selective Acknowledgment)
+
+# Ativa ou desativa o FACK (Forward Acknowledgment).
+sysctl -w net.ipv4.tcp_fack=1 # FACK (Forward Acknowledgment)
+
+# Define o valor de ECN (Explicit Congestion Notification) para o TCP.
+sysctl -w net.ipv4.tcp_ecn=2 # ECN (Explicit Congestion Notification)
+
+# Define o tempo, em segundos, antes de liberar sockets pendentes após a última transmissão.
+sysctl -w net.ipv4.tcp_fin_timeout=10 # Tempo antes de liberar sockets pendentes após a última transmissão
+
+# Define o tempo, em segundos, antes de enviar uma sonda keepalive TCP.
+sysctl -w net.ipv4.tcp_keepalive_time=600 # Tempo antes de enviar uma sonda keepalive TCP
+
+# Define o intervalo, em segundos, entre sondas keepalive TCP consecutivas.
+sysctl -w net.ipv4.tcp_keepalive_intvl=60 # Intervalo entre sondas keepalive TCP consecutivas
+
+# Define o número máximo de sondas keepalive TCP antes de desistir.
+sysctl -w net.ipv4.tcp_keepalive_probes=10 # Número máximo de sondas keepalive TCP
+
+# Ativa ou desativa a economia de métricas TCP.
+sysctl -w net.ipv4.tcp_no_metrics_save=1 # Economia de métricas TCP
+
+# Ativa ou desativa o encaminhamento IP.
+sysctl -w net.ipv4.ip_forward=0 # Desativa o encaminhamento IP
+
+# Define se o sistema aceita redirecionamentos ICMP.
+sysctl -w net.ipv4.conf.all.accept_redirects=0 # Desativa redirecionamentos ICMP
+
+# Define se o sistema envia redirecionamentos ICMP.
+sysctl -w net.ipv4.conf.all.send_redirects=0 # Desativa o envio de redirecionamentos ICMP
+
+# Define se o sistema aceita rotas com source routing.
+sysctl -w net.ipv4.conf.all.accept_source_route=0 # Desativa rotas com source routing
+
+# Define se o sistema filtra pacotes com endereços de origem falsificados.
+sysctl -w net.ipv4.conf.all.rp_filter=1 # Ativa a filtragem de pacotes com endereços de origem falsificados
+
+# ... (continuar com comentários para as demais configurações)
+

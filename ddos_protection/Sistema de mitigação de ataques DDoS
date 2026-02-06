@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Sistema de mitigação de ataques DDoS
+
+############ EXTRA STUFF TO HELP HIGH TRAFFIC (DDOS) ##################
+
+###################################################################################################################
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__        IPTables: Linux's Main line of Defense               ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|        IPTables: Linux's way of saying no to DoS kids       ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__                                                             ##    
+# _|___|___|___|___|___|___|___|___|___|___|___|___|        Version 1.0.0 -                                      ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__        IPTables Script created by p0w3r0ff                  ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__        Sources used and Studied;                            ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__     http://ipset.netfilter.org/iptables.man.html            ##
+# _|___|___|___|___|___|___|___|___|___|___|___|___|                                                             ##
+# ___|___|___|___|___|___|___|___|___|___|___|___|__                                                             ##
+###################################################################################################################
+
+# Função para exibir mensagens
+msg() {
+    echo -e ">>> $1"
+}
+
+function ddos_mitigation_rule() {
+    # Argumentos:
+    #   $1: rule_name - O nome da regra.
+    #   $2: threshold - O número de pacotes que devem ser correspondidos antes que a regra seja acionada.
+    #   $3: action - A ação a ser tomada quando a regra é acionada.
+
+    rule_name=$1
+    threshold=$2
+    action=$3
+
+    # Verifica se a regra já foi aplicada para evitar duplicadas
+    if ! sudo iptables -C INPUT -m recent --name $rule_name &> /dev/null; then
+        # Aplica a regra para bloquear tráfego acima do limiar
+        for port in 80 443; do
+            sudo iptables -A INPUT -p tcp --dport $port -m recent --update --seconds 1 --hitcount $threshold --name $rule_name -j $action
+            sudo iptables -A INPUT -p udp --dport $port -m recent --update --seconds 1 --hitcount $threshold --name $rule_name -j $action
+        done
+
+        msg "Regra de mitigação DDoS '$rule_name' aplicada com sucesso."
+    else
+        msg "A regra de mitigação DDoS '$rule_name' já está em vigor."
+    fi
+}
+
+# Aplica a regra para bloquear tráfego acima do limiar (por exemplo, 1000 pacotes em 1 segundo)
+ddos_mitigation_rule "block_high_volume_traffic" 1000 DROP
