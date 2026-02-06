@@ -1,6 +1,7 @@
 
 import time
 import logging
+import ipaddress
 from collections import defaultdict
 
 class VIPManager:
@@ -13,10 +14,17 @@ class VIPManager:
         self.vip_duration = vip_duration
 
     def add_vip(self, ip_address):
-        """Adds an IP to the VIP list."""
+        """Adds an IP to the VIP list. Validates IP format."""
+        try:
+            ipaddress.ip_address(ip_address)
+        except ValueError:
+            logging.error(f"VIP: Invalid IP address format: {ip_address}")
+            return False
+
         expiration = time.time() + self.vip_duration
         self.whitelist[ip_address] = expiration
         logging.info(f"VIP: Added {ip_address} to whitelist until {expiration}")
+        return True
 
     def is_vip(self, ip_address):
         """Checks if IP is currently VIP."""
