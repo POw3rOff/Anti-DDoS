@@ -87,6 +87,10 @@ class IPFloodAnalyzer:
         else:
             self.pps_threshold = l3_conf.get("normal", 1000)
 
+        self.last_config_check = 0
+        self.config_mtime = 0
+        self.config_path = args.config if args.config else None
+        
         self.enricher = GeoIPEnricher()
         logging.info(f"Initialized {SCRIPT_NAME}. Mode: {args.mode}. PPS Threshold: {self.pps_threshold}")
 
@@ -150,6 +154,38 @@ class IPFloodAnalyzer:
 
         # Reset counters for next window
         self.packet_counts.clear()
+        
+        # Hot Reload Config (Check every 5 seconds)
+        if self.config_path and (time.time() - self.last_config_check) > 5:
+            self._check_config_reload()
+
+    def _check_config_reload(self):
+        """Checks if config file has changed and reloads it."""
+        try:
+            mtime = os.stat(self.config_path).st_mtime
+            if mtime > self.config_mtime:
+                if self.config_mtime == 0:
+                    self.config_mtime = mtime
+                    return
+
+                logging.info("Configuration file changed. Reloading...")
+                new_conf = self._load_config(self.config_path)
+                l3_conf = new_conf.get("layer3", {}).get("pps_ingress", {})
+                
+                # Update Thresholds
+                if self.args.mode == "under_attack":
+                     self.pps_threshold = l3_conf.get("under_attack", 200) # Fallback to default if missing
+                else:
+                     self.pps_threshold = l3_conf.get("normal", 1000)
+
+                # Re-read if source_ip_pps section exists for granularity (future proof)
+                # For now just updating main threshold
+                self.config_mtime = mtime
+                self.last_config_check = time.time()
+                logging.info(f"Config Reloaded. New PPS Threshold: {self.pps_threshold}")
+        except Exception as e:
+            logging.error(f"Failed to hot-reload config: {e}")
+            self.last_config_check = time.time()
 
     def run(self):
         """Main Loop"""

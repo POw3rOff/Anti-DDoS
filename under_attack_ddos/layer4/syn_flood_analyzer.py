@@ -84,6 +84,10 @@ class SynFloodAnalyzer:
         else:
             self.pps_threshold = base_pps
 
+        self.last_config_check = 0
+        self.config_mtime = 0
+        self.config_path = args.config if args.config else None
+
         self.enricher = GeoIPEnricher()
         logging.info(f"Initialized {SCRIPT_NAME}. Mode: {args.mode}. SYN Threshold: {self.pps_threshold} PPS")
 
@@ -159,6 +163,33 @@ class SynFloodAnalyzer:
 
         # Reset counters
         self.syn_counts.clear()
+        
+        # Hot Reload Config (Check every 5 seconds)
+        if self.config_path and (time.time() - self.last_config_check) > 5:
+            self._check_config_reload()
+
+    def _check_config_reload(self):
+        """Checks if config file has changed and reloads it."""
+        try:
+            mtime = os.stat(self.config_path).st_mtime
+            if mtime > self.config_mtime:
+                if self.config_mtime == 0:
+                    self.config_mtime = mtime
+                    return
+
+                logging.info("Configuration file changed. Reloading...")
+                new_conf = self._load_config(self.config_path)
+                l4_conf = new_conf.get("layer4", {}).get("syn_flood", {})
+                
+                # Update Threshold
+                self.pps_threshold = l4_conf.get("syn_rate_pps", 200)
+
+                self.config_mtime = mtime
+                self.last_config_check = time.time()
+                logging.info(f"Config Reloaded. New SYN Threshold: {self.pps_threshold}")
+        except Exception as e:
+            logging.error(f"Failed to hot-reload config: {e}")
+            self.last_config_check = time.time()
 
     def run(self):
         """Main Loop"""

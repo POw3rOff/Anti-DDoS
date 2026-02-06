@@ -116,4 +116,72 @@ btnPanic.addEventListener("click", async () => {
     }
 });
 
+// Elements
+const modalConfig = document.getElementById("config-modal");
+const btnSettings = document.getElementById("settings-btn");
+const btnCloseModal = document.querySelector(".close-modal");
+const btnSaveConfig = document.getElementById("save-config-btn");
+const txtConfigEditor = document.getElementById("config-editor");
+
+// Config Modal Logic
+btnSettings.addEventListener("click", async () => {
+    modalConfig.classList.add("active");
+    await loadConfig();
+});
+
+btnCloseModal.addEventListener("click", () => {
+    modalConfig.classList.remove("active");
+});
+
+window.addEventListener("click", (e) => {
+    if (e.target == modalConfig) {
+        modalConfig.classList.remove("active");
+    }
+});
+
+async function loadConfig() {
+    try {
+        txtConfigEditor.value = "Loading...";
+        const res = await fetch(`${API_URL}/config/thresholds`);
+        const data = await res.json();
+        // Convert JSON to YAML string for editing (simple dumping)
+        // Using js-yaml if available, else JSON
+        if (window.jsyaml) {
+            txtConfigEditor.value = jsyaml.dump(data);
+        } else {
+            txtConfigEditor.value = JSON.stringify(data, null, 2);
+        }
+    } catch (e) {
+        txtConfigEditor.value = "Error loading config: " + e;
+    }
+}
+
+btnSaveConfig.addEventListener("click", async () => {
+    try {
+        const raw = txtConfigEditor.value;
+        let configObj;
+
+        if (window.jsyaml) {
+            configObj = jsyaml.load(raw);
+        } else {
+            configObj = JSON.parse(raw);
+        }
+
+        const res = await fetch(`${API_URL}/config/thresholds`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ config: configObj })
+        });
+
+        if (res.ok) {
+            alert("Configuration Saved & Reloaded!");
+            modalConfig.classList.remove("active");
+        } else {
+            alert("Error saving config");
+        }
+    } catch (e) {
+        alert("Invalid YAML/JSON Syntax: " + e);
+    }
+});
+
 init();

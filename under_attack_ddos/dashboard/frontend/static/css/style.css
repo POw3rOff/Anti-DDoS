@@ -104,6 +104,7 @@ header {
     background: var(--card-bg);
     border: var(--card-border);
     backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
     padding: 25px;
     border-radius: 8px;
     position: relative;
@@ -296,4 +297,108 @@ li {
 
 ::-webkit-scrollbar-thumb:hover {
     background: var(--neon-green);
+}
+
+/* Modals */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
+
+.modal.active {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background: #111;
+    border: 1px solid var(--neon-blue);
+    width: 60%;
+    max-width: 800px;
+    box-shadow: 0 0 20px rgba(0, 136, 255, 0.3);
+    border-radius: 5px;
+}
+
+.modal-header {
+    background: #0a0a0a;
+    padding: 15px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+#config-editor {
+    width: 100%;
+    background: #050505;
+    color: var(--neon-green);
+    font-family: var(--font-mono);
+    border: 1px solid #333;
+    padding: 10px;
+    resize: vertical;
+}
+
+.modal-footer {
+    padding: 15px;
+    border-top: 1px solid #333;
+    text-align: right;
+}
+
+.close-modal {
+    color: #aaa;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-modal:hover {
+    color: #fff;
+}
+
+.btn-icon {
+    background: transparent;
+    border: 1px solid var(--neon-blue);
+    color: var(--neon-blue);
+    padding: 8px 15px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+}
+
+.btn-icon:hover {
+    background: var(--neon-blue);
+    color: #000;
+}
+
+.btn-save {
+    background: var(--neon-green);
+    color: #000;
+    border: none;
+    padding: 10px 20px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.btn-save:hover {
+    opacity: 0.9;
+}
+
+.version-tag {
+    font-size: 0.8rem;
+    vertical-align: middle;
+    margin-left: 10px;
+    color: #666;
 }
