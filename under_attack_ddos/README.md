@@ -2,7 +2,7 @@
 
 **under_attack_ddos** is a modular, scalable, defensive system designed to detect and mitigate attacks across multiple network layers. It employs a distributed architecture with a central orchestrator, cross-layer correlation, and specific game protocol protections.
 
-## Project Structure
+# Cyber Gamers Linux Security Suite
 
 This project is organized into modular components, each responsible for specific layers of defense or system management:
 
@@ -39,7 +39,7 @@ Unlike generic solutions, `under_attack_ddos` includes a dedicated `layer_game` 
 ### ML Intelligence
 The `ml_intelligence` module provides advanced anomaly detection using isolation forests and ensemble models to identify low-and-slow attacks that static thresholds might miss.
 
-## Usage
+## 🚀 Guia Rápido (Quick Start)
 
 The system is designed to be run as a collection of services. The entry point for the control plane is the Orchestrator:
 
