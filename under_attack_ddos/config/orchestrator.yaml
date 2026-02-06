@@ -8,6 +8,8 @@ orchestrator:
     layer3: 0.4
     layer4: 0.3
     layer7: 0.3
+    layer_game: 0.6  # High weight for application-specific attacks
+    correlation: 1.0 # Highest weight for confirmed campaigns
 
   # Multiplier for multi-layer attacks
   cross_layer_multiplier: 1.5

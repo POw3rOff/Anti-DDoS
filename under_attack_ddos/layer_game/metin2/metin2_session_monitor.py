@@ -95,11 +95,10 @@ class Metin2SessionMonitor(GameProtocolParser):
         """Check accumulated metrics against thresholds."""
         now = time.time()
         duration = now - self.start_window
-        if duration < 1.0: duration = 1.0
+        if duration < 0.1: duration = 0.1
 
         # Load Thresholds from self.config (loaded by base class)
         max_pps = self.config.get("max_session_pps", 50)
-        max_initial_pps = self.config.get("max_initial_pps", 20)
         max_channel_switches = self.config.get("max_channel_switches", 5)
         idle_limit = self.config.get("idle_timeout", 300)
         grace_period = self.config.get("grace_period", 2.0)
@@ -119,17 +118,8 @@ class Metin2SessionMonitor(GameProtocolParser):
 
             # 2. PPS Check
             session_age = now - sess["start_ts"]
-            pps = sess["pkt_count"] / duration
-
-            if session_age <= grace_period:
-                if pps > max_initial_pps:
-                    self.emit_event("early_flood_detected", ip, "CRITICAL", {
-                        "value": round(pps, 2),
-                        "threshold": max_initial_pps,
-                        "age": round(session_age, 2)
-                    })
-
             if session_age > grace_period:
+                pps = sess["pkt_count"] / duration
                 if pps > max_pps:
                     self.emit_event("session_abuse", ip, "HIGH", {
                         "metric": "pps_exceeded",
