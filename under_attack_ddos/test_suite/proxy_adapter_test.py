@@ -41,5 +41,23 @@ class TestProxyAdapter(unittest.TestCase):
             # The class uses a set for runtime dedup
             self.assertEqual(content.count("192.168.1.100 1;"), 1)
 
+    def test_block_invalid_ip(self):
+        """Ensure invalid IPs/injection attempts are rejected."""
+        adapter = ProxyAdapter(config_path=self.test_config)
+        malicious_ip = "1.2.3.4; server { listen 80; }"
+
+        adapter.block_ip(malicious_ip)
+
+        with open(self.test_config, 'r') as f:
+            content = f.read()
+            self.assertNotIn(malicious_ip, content)
+            self.assertNotIn("server {", content)
+
+        # Ensure valid IP still works
+        adapter.block_ip("8.8.8.8")
+        with open(self.test_config, 'r') as f:
+            content = f.read()
+            self.assertIn("8.8.8.8 1;", content)
+
 if __name__ == "__main__":
     unittest.main()

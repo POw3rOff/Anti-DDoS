@@ -3,6 +3,7 @@ import os
 import subprocess
 import logging
 import platform
+import ipaddress
 
 class ProxyAdapter:
     """
@@ -29,6 +30,13 @@ class ProxyAdapter:
         Adds an IP to the Nginx deny list and reloads.
         verdict: 1=Block (403), 2=Challenge (429)
         """
+        # Validate IP address to prevent config injection
+        try:
+            ipaddress.ip_address(ip_address)
+        except ValueError:
+            logging.error(f"PROXY: Invalid IP address rejected: {ip_address}")
+            return
+
         # If IP is already banned with same verdict, skip
         if (ip_address, verdict) in self.banned_ips:
             return
