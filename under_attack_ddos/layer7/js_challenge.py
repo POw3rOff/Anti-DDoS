@@ -1,6 +1,9 @@
 
 import time
 import hashlib
+import hmac
+import os
+import secrets
 import base64
 
 class JSChallenge:
@@ -9,14 +12,25 @@ class JSChallenge:
     Generates an HTML page that forces the client to solve a math puzzle
     and reload with a valid token.
     """
-    def __init__(self, secret_key="super_secret_salt"):
-        self.secret_key = secret_key
+    def __init__(self, secret_key=None):
+        # Use provided key, or environment variable, or generate a secure random one
+        self.secret_key = secret_key or os.getenv("UAD_JS_SECRET")
+        if not self.secret_key:
+            self.secret_key = secrets.token_hex(32)
+            # In production, this means tokens are invalid after restart, which is secure.
+
+    def _generate_signature(self, client_ip, timestamp):
+        """Generates an HMAC signature for the given IP and timestamp."""
+        message = f"{client_ip}:{timestamp}".encode()
+        return hmac.new(self.secret_key.encode(), message, hashlib.sha256).hexdigest()
 
     def generate_challenge(self, client_ip):
         """Returns the HTML content for the interstitial page."""
         timestamp = int(time.time())
-        nonce = f"{client_ip}:{timestamp}:{self.secret_key}"
-        token = hashlib.sha256(nonce.encode()).hexdigest()
+        signature = self._generate_signature(client_ip, timestamp)
+        # Token format: timestamp:signature
+        token_raw = f"{timestamp}:{signature}"
+        token = base64.urlsafe_b64encode(token_raw.encode()).decode()
         
         html = f"""
         <!DOCTYPE html>
@@ -47,8 +61,18 @@ class JSChallenge:
 
     def validate_token(self, client_ip, token):
         """Validates the returned token cookie."""
-        # In a real implementation, we'd check if the token matches the IP+Timestamp window
-        # For simplicity, we just allow verification if the format looks right (mock)
-        if len(token) == 64:
-            return True
-        return False
+        try:
+            # Token is base64(timestamp:signature)
+            decoded = base64.urlsafe_b64decode(token).decode()
+            timestamp_str, signature = decoded.split(":")
+            timestamp = int(timestamp_str)
+
+            # Check if timestamp is within valid window (e.g., 5 minutes)
+            now = time.time()
+            if abs(now - timestamp) > 300:
+                return False
+
+            expected_signature = self._generate_signature(client_ip, timestamp)
+            return hmac.compare_digest(signature, expected_signature)
+        except (ValueError, IndexError, AttributeError):
+            return False

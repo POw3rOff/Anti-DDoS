@@ -33,12 +33,25 @@ class TestHardening(unittest.TestCase):
 
     # --- L7 Tests ---
     def test_js_challenge(self):
+        import re
         js = JSChallenge(secret_key="test")
         html = js.generate_challenge("1.2.3.4")
         self.assertIn("<script>", html)
         self.assertIn("solve", html)
-        # Token validation (mock)
-        self.assertTrue(js.validate_token("1.2.3.4", "a"*64))
+
+        # Extract token from HTML
+        match = re.search(r'var token = "([^"]+)"', html)
+        self.assertTrue(match, "Token not found in HTML")
+        token = match.group(1)
+
+        # Verify valid token
+        self.assertTrue(js.validate_token("1.2.3.4", token), "Valid token should be accepted")
+
+        # Verify invalid token (modified)
+        self.assertFalse(js.validate_token("1.2.3.4", token + "a"), "Modified token should be rejected")
+
+        # Verify invalid token (wrong IP)
+        self.assertFalse(js.validate_token("5.6.7.8", token), "Token for wrong IP should be rejected")
 
     # --- Game Tests ---
     def test_vip_manager(self):
