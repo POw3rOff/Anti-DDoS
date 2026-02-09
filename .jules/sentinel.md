@@ -7,3 +7,8 @@
 **Vulnerability:** Unvalidated user input (IP address) was written directly to an Nginx configuration file, allowing for arbitrary directive injection.
 **Learning:** File generation from user input is a high-risk sink. Even seemingly safe data types like "IP Address" can be vectors for injection if not strictly typed.
 **Prevention:** Use strict type validation (e.g., `ipaddress` module) for all inputs before writing them to configuration files or system commands. Do not rely on string formatting alone.
+
+## 2025-05-24 - Mock Logic in Production Security Controls
+**Vulnerability:** The Layer 7 challenge module (`JSChallenge`) contained a hardcoded secret key (`super_secret_salt`) and a mock validation function (`validate_token`) that accepted any 64-character string as valid. This critical flaw allowed attackers to bypass the DDoS protection entirely with trivial effort.
+**Learning:** Security controls often contain placeholder or "mock" implementations during development that are forgotten and deployed to production. Explicit comments like "In a real implementation..." are red flags that must be audited before release.
+**Prevention:** Never commit mock implementations to security-critical paths in the main branch. Use abstract base classes or dependency injection for testing mocks, and enforce code reviews specifically targeting "TODO" comments in security modules. Always use secure-by-default initialization (e.g., generating a random key if none is provided) rather than insecure hardcoded fallbacks.
