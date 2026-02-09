@@ -33,6 +33,7 @@ class TestHardening(unittest.TestCase):
 
     # --- L7 Tests ---
     def test_js_challenge(self):
+        import re
         js = JSChallenge(secret_key="test")
         html = js.generate_challenge("1.2.3.4")
         self.assertIn("<script>", html)
