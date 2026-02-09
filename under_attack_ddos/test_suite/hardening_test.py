@@ -37,8 +37,25 @@ class TestHardening(unittest.TestCase):
         html = js.generate_challenge("1.2.3.4")
         self.assertIn("<script>", html)
         self.assertIn("solve", html)
-        # Token validation (mock)
-        self.assertTrue(js.validate_token("1.2.3.4", "a"*64))
+
+        # Extract token from HTML
+        import re
+        match = re.search(r'var token = "([^"]+)"', html)
+        self.assertTrue(match, "Token not found in HTML")
+        token = match.group(1)
+
+        # Verify valid token
+        self.assertTrue(js.validate_token("1.2.3.4", token))
+
+        # Verify invalid token (wrong IP)
+        self.assertFalse(js.validate_token("1.2.3.5", token))
+
+        # Verify invalid token (tampered)
+        self.assertFalse(js.validate_token("1.2.3.4", token + "a"))
+
+        # Verify invalid token (old/expired)
+        expired_token = js._create_token("1.2.3.4", timestamp=int(time.time()) - 301)
+        self.assertFalse(js.validate_token("1.2.3.4", expired_token))
 
     # --- Game Tests ---
     def test_vip_manager(self):

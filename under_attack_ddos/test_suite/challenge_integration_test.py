@@ -39,10 +39,9 @@ class TestChallengeIntegration(unittest.TestCase):
         # We can create a valid token using the same logic as the backend
         
         from layer7.js_challenge import JSChallenge
-        js = JSChallenge(secret_key="production_secret_key")
+        js = JSChallenge()
         # TestClient uses 'testclient' as host usually, or 127.0.0.1
         # TestClient default host is 'testclient'
-        token = "test_token" # We can't easily reproduce the token without the exact timestamp matching
         
         # Actually, let's just create a valid token for "testclient"
         # The backend uses request.client.host
