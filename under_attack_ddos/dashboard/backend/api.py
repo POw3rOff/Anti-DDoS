@@ -20,7 +20,6 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../../config/thresholds.y
 CAPTURES_DIR = os.path.join(os.path.dirname(__file__), "../../data/captures")
 
 config_manager = ConfigManager(CONFIG_PATH)
-# Uses UAD_JS_SECRET env var or falls back to a secure random key
 js_challenge = JSChallenge() # Logic instance
 
 class PanicRequest(BaseModel):

@@ -2,9 +2,10 @@
 import time
 import hashlib
 import hmac
+import base64
 import os
 import secrets
-import base64
+import logging
 
 class JSChallenge:
     """
@@ -13,24 +14,35 @@ class JSChallenge:
     and reload with a valid token.
     """
     def __init__(self, secret_key=None):
-        # Use provided key, or environment variable, or generate a secure random one
         self.secret_key = secret_key or os.getenv("UAD_JS_SECRET")
         if not self.secret_key:
+            logging.warning("JSChallenge: No secret key provided. Using ephemeral random key.")
             self.secret_key = secrets.token_hex(32)
-            # In production, this means tokens are invalid after restart, which is secure.
 
-    def _generate_signature(self, client_ip, timestamp):
-        """Generates an HMAC signature for the given IP and timestamp."""
-        message = f"{client_ip}:{timestamp}".encode()
-        return hmac.new(self.secret_key.encode(), message, hashlib.sha256).hexdigest()
+    def _create_token(self, client_ip, timestamp=None):
+        """Creates a signed token for the given IP and timestamp."""
+        if timestamp is None:
+            timestamp = int(time.time())
+
+        # Message to sign
+        message = f"{client_ip}:{timestamp}"
+
+        # Compute HMAC
+        signature = hmac.new(
+            self.secret_key.encode(),
+            message.encode(),
+            hashlib.sha256
+        ).hexdigest()
+
+        # Combine timestamp and signature
+        token_data = f"{timestamp}:{signature}"
+
+        # Base64 encode for cookie safety
+        return base64.urlsafe_b64encode(token_data.encode()).decode()
 
     def generate_challenge(self, client_ip):
         """Returns the HTML content for the interstitial page."""
-        timestamp = int(time.time())
-        signature = self._generate_signature(client_ip, timestamp)
-        # Token format: timestamp:signature
-        token_raw = f"{timestamp}:{signature}"
-        token = base64.urlsafe_b64encode(token_raw.encode()).decode()
+        token = self._create_token(client_ip)
         
         html = f"""
         <!DOCTYPE html>
@@ -62,17 +74,33 @@ class JSChallenge:
     def validate_token(self, client_ip, token):
         """Validates the returned token cookie."""
         try:
-            # Token is base64(timestamp:signature)
-            decoded = base64.urlsafe_b64decode(token).decode()
-            timestamp_str, signature = decoded.split(":")
+            # Decode token
+            if not token:
+                return False
+            token_data = base64.urlsafe_b64decode(token).decode()
+            parts = token_data.split(":")
+            if len(parts) != 2:
+                return False
+
+            timestamp_str, received_signature = parts
             timestamp = int(timestamp_str)
 
-            # Check if timestamp is within valid window (e.g., 5 minutes)
+            # Check timestamp window (5 minutes)
             now = time.time()
             if abs(now - timestamp) > 300:
                 return False
 
-            expected_signature = self._generate_signature(client_ip, timestamp)
-            return hmac.compare_digest(signature, expected_signature)
-        except (ValueError, IndexError, AttributeError):
+            # Recompute signature
+            message = f"{client_ip}:{timestamp}"
+            expected_signature = hmac.new(
+                self.secret_key.encode(),
+                message.encode(),
+                hashlib.sha256
+            ).hexdigest()
+
+            # Verify signature securely
+            return hmac.compare_digest(received_signature, expected_signature)
+
+        except Exception:
+            # Catch all: decoding errors, int conversion errors, etc.
             return False
